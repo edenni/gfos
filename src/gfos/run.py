@@ -4,8 +4,8 @@ import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig
 
-from project.pipeline import pipelines
-from project.utils.rich import print_config_tree
+from gfos.pipeline import pipelines
+from gfos.utils.rich import print_config_tree
 
 logger = logging.getLogger(__name__)
 
