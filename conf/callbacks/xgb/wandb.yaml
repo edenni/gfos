@@ -1,0 +1,8 @@
+# @package callbacks
+
+wandb:
+  _target_: wandb.xgboost.WandbCallback
+  log_model: False
+  log_feature_importance: True
+  importance_type: gain
+  define_metric: True

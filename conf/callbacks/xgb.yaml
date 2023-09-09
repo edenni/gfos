@@ -1,0 +1,5 @@
+defaults:
+ - xgb/early_stopping
+#  - xgb/wandb
+ - _self_
+

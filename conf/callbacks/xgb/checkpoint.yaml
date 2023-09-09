@@ -1,0 +1,9 @@
+# @package callbacks
+
+checkpoint:
+  _target_: xgboost.callback.TrainingCheckpoint
+
+  directory: ${paths.output_dir}/checkpoints
+  name: model
+  as_pickle: True
+  iteration: 100

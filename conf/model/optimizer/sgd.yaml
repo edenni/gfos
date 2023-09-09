@@ -1,0 +1,8 @@
+# @package model.optimizer
+
+_target_: torch.optim.SGD
+_partial_: true
+lr: 3e-4
+momentum: 0.9
+nesterov: true
+weight_decay: 0.0

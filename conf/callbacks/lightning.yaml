@@ -1,0 +1,19 @@
+defaults:
+  - lightning/model_checkpoint.yaml
+  - lightning/lr_monitor.yaml
+  - _self_
+
+model_checkpoint:
+  dirpath: ${hydra:runtime.output_dir}/checkpoints
+  filename: "{${main_metric}:.3f}-{epoch:03d}"
+  monitor: ${main_metric}
+  mode: ${matric_mode}
+  save_last: True
+  save_top_k: 10
+  auto_insert_metric_name: False
+
+early_stopping:
+  monitor: ${main_metric}
+  min_delta: 0.001
+  patience: 3
+  mode: ${matric_mode}

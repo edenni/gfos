@@ -1,0 +1,10 @@
+# @package callbacks
+
+early_stopping:
+  _target_: xgboost.callback.EarlyStopping
+  rounds: 10
+  data_name: validation_0
+  metric_name: f1_macro
+  min_delta: 0.001
+  maximize: True
+  save_best: True

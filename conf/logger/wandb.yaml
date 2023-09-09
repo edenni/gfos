@@ -1,0 +1,10 @@
+# https://wandb.ai
+
+_target_: pytorch_lightning.loggers.wandb.WandbLogger
+name: 
+project: ${project}
+entity: 
+group: 
+tags: []
+job_type:
+dir: ${paths.log_dir}

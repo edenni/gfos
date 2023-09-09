@@ -1,0 +1,23 @@
+_target_: psp.model.rnn.RNNEncoder
+
+defaults:
+  - optimizer: adam
+  - scheduler: cosine
+
+input_size: 35
+hidden_size: 192
+num_layers: 1
+bias: false
+batch_first: true
+dropout: 0
+bidirectional: false
+net_name: lstm
+output_size: 1
+threshold: 0.5
+linear_hidden_size: 256
+pos_weight: 0.5
+
+scheduler_conf:
+  monitor: val/f1
+  interval: epoch
+  frequency: 1

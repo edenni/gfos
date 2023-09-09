@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - override /model: rnn
+  - override /logger: wandb
+  - override /callbacks: lightning
+  - override /data: playsession
+  - override /trainer: lightning
+
+hydra:
+  job:
+    name: ${run_name}
+
+logger:
+  project: ${project}
+  group: 
+  name: ${run_name}
+  tags: ["rnn", "cv"]
+  job_type: ${task}
+
+trainer:
+  max_epochs: 150
+
+run_name: 
+pipeline: lstm  # available pipelines defined in src/*/pipeline/
+task: cv  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
+cv: 5

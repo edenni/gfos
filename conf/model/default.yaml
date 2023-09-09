@@ -1,0 +1,8 @@
+defaults:
+  - optimizer: adam
+  - scheduler: cosine
+
+scheduler_conf:
+  monitor: ${main_metric}
+  interval: epoch
+  frequency: 1

@@ -1,0 +1,10 @@
+_target_: psp.utils.scheduler.CosineAnnealingWarmupRestarts
+
+_partial_: true
+first_cycle_steps: 10
+cycle_mult: 1.0
+max_lr: 0.1
+min_lr: 0.001
+warmup_steps: 10
+gamma: 1.0
+last_epoch: -1
