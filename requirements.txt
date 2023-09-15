@@ -21,3 +21,4 @@ jupyter
 jupyterlab
 ipywidgets
 nvitop
+torch_geometric
