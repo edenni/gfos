@@ -22,3 +22,5 @@ jupyterlab
 ipywidgets
 nvitop
 torch_geometric
+timm
+tensorflow
