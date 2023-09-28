@@ -18,7 +18,7 @@ class LayoutDataset(Dataset):
 
     def __getitem__(self, idx) -> dict[str, Any]:
         file = self.files[idx]
-        model_id = file.split("/")[-1].split(".")[0]
+        model_id = file.split("\\")[-1].split(".")[0]
         record = np.load(file)
 
         # Random sample `max_configs` configs from all `c` configs
