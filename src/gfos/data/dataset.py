@@ -97,7 +97,9 @@ class LayoutDataset(Dataset):
             )
 
             c = len(record["config_runtime"])
-            max_configs = self.max_configs if self.max_configs > 0 else c
+            max_configs = (
+                min(self.max_configs, c) if self.max_configs > 0 else c
+            )
             if self.permute:
                 config_indices = torch.randperm(c)[:max_configs]
             else:
