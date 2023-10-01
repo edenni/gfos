@@ -97,13 +97,11 @@ class LayoutDataset(Dataset):
         files: list[str],
         max_configs: int = -1,
         num_configs: int = -1,
-        permute: bool = True,
         config_edges: bool = False,
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
         self.files = files
-        self.permute = permute
         self.config_edges = config_edges
 
         self.data = []
@@ -113,20 +111,15 @@ class LayoutDataset(Dataset):
             model_id = file.split("\\")[-1].split(".")[0]
             record["model_id"] = model_id
             runtime = record["config_runtime"]
-            record["config_runtime"] = (runtime - runtime.min()) / (
-                runtime.max() - runtime.min()
+
+            runtime_sampled, config_indices = sample_configs(
+                runtime, max_configs
+            )
+            runtime_norm = (runtime_sampled - runtime_sampled.min()) / (
+                runtime_sampled.max() - runtime_sampled.min()
             )
 
-            c = len(record["config_runtime"])
-            max_configs = (
-                min(self.max_configs, c) if self.max_configs > 0 else c
-            )
-            if self.permute:
-                config_indices = torch.randperm(c)[:max_configs]
-            else:
-                config_indices = torch.arange(max_configs)
-
-            record["config_runtime"] = record["config_runtime"][config_indices]
+            record["config_runtime"] = runtime_norm
             record["node_config_feat"] = record["node_config_feat"][
                 config_indices
             ]
@@ -155,7 +148,12 @@ class LayoutDataset(Dataset):
             num_configs = config_runtime.size(0)
 
         # Shuffle
-        config_indices = torch.randperm(config_runtime.size(0))[:num_configs]
+        if self.max_configs > 0 or self.num_configs > 0:
+            config_indices = torch.randperm(config_runtime.size(0))[
+                :num_configs
+            ]
+        else:
+            config_indices = torch.arange(num_configs)
         config_runtime = config_runtime[config_indices]
 
         model_id = record["model_id"]
@@ -192,3 +190,29 @@ class LayoutDataset(Dataset):
             sample["config_edge_index"] = config_edge_index
 
         return sample
+
+
+def sample_configs(
+    config_runtime: np.array, max_configs: int
+) -> (np.array, np.array):
+    """Sample 1/3 max_configs of best configs and 1/3 of worst configs,
+    and the rest randomly. Return the sampled configs and indices.
+    """
+    c = len(config_runtime)
+    max_configs = min(max_configs, c) if max_configs > 0 else c
+    third = max_configs // 3
+
+    sorted_indices = np.argsort(config_runtime)
+
+    keep_indices = np.concatenate(
+        [
+            sorted_indices[:third],  # Good configs.
+            sorted_indices[-third:],  # Bad configs.
+            np.random.choice(
+                sorted_indices[third:-third],
+                max_configs - 2 * third,
+            ),
+        ]
+    )
+
+    return config_runtime[keep_indices], keep_indices

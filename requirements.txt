@@ -24,3 +24,5 @@ nvitop
 torch_geometric
 timm
 tensorflow
+tensorflow_ranking
+torch_geometric
