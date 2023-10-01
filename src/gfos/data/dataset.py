@@ -5,16 +5,23 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from gfos.data.graph import get_config_graph
+
 
 class LazyLayoutDataset(Dataset):
     """Load data when getitem."""
 
     def __init__(
-        self, files: list[str], max_configs: int = -1, permute: bool = True
+        self,
+        files: list[str],
+        max_configs: int = -1,
+        permute: bool = True,
+        config_edges: bool = False,
     ):
         self.max_configs = max_configs
         self.files = files
         self.permute = permute
+        self.config_edges = config_edges
 
     def __len__(self):
         return len(self.files)
@@ -60,7 +67,7 @@ class LazyLayoutDataset(Dataset):
             record["node_config_ids"], dtype=torch.long
         )
 
-        return dict(
+        sample = dict(
             model_id=model_id,
             node_feat=node_feat,
             node_opcode=node_opcode,
@@ -69,6 +76,17 @@ class LazyLayoutDataset(Dataset):
             node_config_ids=node_config_ids,
             config_runtime=config_runtime,
         )
+
+        if self.config_edges:
+            config_edge_index = get_config_graph(
+                record["edge_index"], record["node_config_ids"]
+            )
+            config_edge_index = torch.tensor(
+                np.swapaxes(config_edge_index, 0, 1), dtype=torch.long
+            )
+            sample["config_edge_index"] = config_edge_index
+
+        return sample
 
 
 class LayoutDataset(Dataset):
@@ -80,13 +98,16 @@ class LayoutDataset(Dataset):
         max_configs: int = -1,
         num_configs: int = -1,
         permute: bool = True,
+        config_edges: bool = False,
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
         self.files = files
         self.permute = permute
+        self.config_edges = config_edges
 
         self.data = []
+
         for file in tqdm(self.files, desc="Loading data"):
             record = dict(np.load(file))
             model_id = file.split("\\")[-1].split(".")[0]
@@ -109,6 +130,11 @@ class LayoutDataset(Dataset):
             record["node_config_feat"] = record["node_config_feat"][
                 config_indices
             ]
+
+            if self.config_edges:
+                record["config_edge_index"] = get_config_graph(
+                    record["edge_index"], record["node_config_ids"]
+                )
 
             self.data.append(record)
 
@@ -148,7 +174,7 @@ class LayoutDataset(Dataset):
             record["node_config_ids"], dtype=torch.long
         )
 
-        return dict(
+        sample = dict(
             model_id=model_id,
             node_feat=node_feat,
             node_opcode=node_opcode,
@@ -157,3 +183,12 @@ class LayoutDataset(Dataset):
             node_config_ids=node_config_ids,
             config_runtime=config_runtime,
         )
+
+        if self.config_edges:
+            config_edge_index = torch.tensor(
+                np.swapaxes(record["config_edge_index"], 0, 1),
+                dtype=torch.long,
+            )
+            sample["config_edge_index"] = config_edge_index
+
+        return sample
