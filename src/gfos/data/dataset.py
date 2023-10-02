@@ -1,4 +1,5 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -6,6 +7,75 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from gfos.data.graph import get_config_graph
+
+
+@dataclass
+class Normalizer:
+    node_feat_mask: torch.Tensor
+    node_feat_min: torch.Tensor
+    node_feat_max: torch.Tensor
+    node_config_feat_mask: torch.Tensor
+    node_config_feat_min: torch.Tensor
+    node_config_feat_max: torch.Tensor
+
+    def normalize_node_feat(self, node_feat: torch.Tensor) -> torch.Tensor:
+        assert node_feat.ndim == 2, "node_feat must be 2D"
+        node_feat = node_feat[:, self.node_feat_mask]
+
+        return (node_feat - self.node_feat_min) / (
+            self.node_feat_max - self.node_feat_min
+        )
+
+    def normalize_node_config_feat(
+        self, node_config_feat: torch.Tensor
+    ) -> torch.Tensor:
+        assert node_config_feat.ndim == 3, "node_config_feat must be 3D"
+        node_config_feat = node_config_feat[:, :, self.node_config_feat_mask]
+        return (node_config_feat - self.node_config_feat_min) / (
+            self.node_config_feat_max - self.node_config_feat_min
+        )
+
+    @classmethod
+    def from_configs(
+        cls,
+        configs: dict,
+        source: Literal["xla", "nlp"],
+        search: Literal["default", "random"],
+    ) -> "Normalizer":
+        try:
+            data = configs[source][search]
+        except KeyError:
+            raise KeyError(
+                f"Invalid source or search: source={source}, search={search}"
+            )
+        else:
+            node_feat_mask = torch.tensor(
+                data["node_feat_mask"], dtype=torch.bool
+            )
+            node_feat_min = torch.tensor(
+                data["node_feat_min"], dtype=torch.float
+            )[node_feat_mask]
+            node_feat_max = torch.tensor(
+                data["node_feat_max"], dtype=torch.float
+            )[node_feat_mask]
+            node_config_feat_mask = torch.tensor(
+                data["node_config_feat_mask"], dtype=torch.bool
+            )
+            node_config_feat_min = torch.tensor(
+                data["node_config_feat_min"], dtype=torch.float
+            )[node_config_feat_mask]
+            node_config_feat_max = torch.tensor(
+                data["node_config_feat_max"], dtype=torch.float
+            )[node_config_feat_mask]
+
+            return Normalizer(
+                node_feat_mask=node_feat_mask,
+                node_feat_min=node_feat_min,
+                node_feat_max=node_feat_max,
+                node_config_feat_mask=node_config_feat_mask,
+                node_config_feat_min=node_config_feat_min,
+                node_config_feat_max=node_config_feat_max,
+            )
 
 
 class LazyLayoutDataset(Dataset):
@@ -98,11 +168,13 @@ class LayoutDataset(Dataset):
         max_configs: int = -1,
         num_configs: int = -1,
         config_edges: bool = False,
+        normalizer: Normalizer = None,
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
         self.files = files
         self.config_edges = config_edges
+        self.normalizer = normalizer
 
         self.data = []
 
@@ -171,6 +243,12 @@ class LayoutDataset(Dataset):
         node_config_ids = torch.tensor(
             record["node_config_ids"], dtype=torch.long
         )
+
+        if self.normalizer is not None:
+            node_feat = self.normalizer.normalize_node_feat(node_feat)
+            node_config_feat = self.normalizer.normalize_node_config_feat(
+                node_config_feat
+            )
 
         sample = dict(
             model_id=model_id,
