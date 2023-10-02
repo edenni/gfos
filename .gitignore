@@ -155,6 +155,7 @@ cython_debug/
 # Data
 input/**
 output/**
+data/**
 
 # Logs
 logs/**
