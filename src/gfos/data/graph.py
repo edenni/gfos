@@ -34,6 +34,30 @@ class Graph:
 
     def trim_and_merge(self, specified_nodes: list):
         trimmed_graph = defaultdict(set)
+        visited_global = set()  # to keep track of globally visited nodes
+        specified_nodes = set(specified_nodes)
+
+        for src in specified_nodes:
+            if src in visited_global:  # skip already visited nodes
+                continue
+
+            visited = set([src])
+            queue = deque([src])
+
+            while queue:
+                node = queue.popleft()
+                visited_global.add(node)
+                for neighbor in self.graph[node]:
+                    if neighbor in specified_nodes:
+                        trimmed_graph[src].add(neighbor)
+                    elif neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+
+        return trimmed_graph
+
+    def trim_and_merge_full_connection(self, specified_nodes: list):
+        trimmed_graph = defaultdict(set)
 
         specified_nodes = set(specified_nodes)
 
