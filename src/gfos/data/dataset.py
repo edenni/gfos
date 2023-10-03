@@ -183,15 +183,19 @@ class LayoutDataset(Dataset):
             model_id = file.split("\\")[-1].split(".")[0]
             record["model_id"] = model_id
             runtime = record["config_runtime"]
-
-            runtime_sampled, config_indices = sample_configs(
-                runtime, max_configs
-            )
-            runtime_norm = (runtime_sampled - runtime_sampled.min()) / (
-                runtime_sampled.max() - runtime_sampled.min()
+            runtime = (runtime - runtime.min()) / (
+                runtime.max() - runtime.min()
             )
 
-            record["config_runtime"] = runtime_norm
+            if self.max_configs > 0:
+                runtime_sampled, config_indices = sample_configs(
+                    runtime, max_configs
+                )
+            else:
+                runtime_sampled = runtime
+                config_indices = torch.arange(len(runtime))
+
+            record["config_runtime"] = runtime_sampled
             record["node_config_feat"] = record["node_config_feat"][
                 config_indices
             ]
@@ -270,6 +274,7 @@ class LayoutDataset(Dataset):
         return sample
 
 
+# TODO: no shuffle when max_configs < 0
 def sample_configs(
     config_runtime: np.array, max_configs: int
 ) -> (np.array, np.array):
