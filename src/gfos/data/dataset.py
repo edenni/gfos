@@ -167,8 +167,9 @@ class LayoutDataset(Dataset):
         files: list[str],
         max_configs: int = -1,
         num_configs: int = -1,
-        config_edges: bool = False,
+        config_edges: Literal["simple", "full_connect"] = None,
         normalizer: Normalizer = None,
+        test: bool = False,  # TODO: remove
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
@@ -187,7 +188,10 @@ class LayoutDataset(Dataset):
                 runtime.max() - runtime.min()
             )
 
-            if self.max_configs > 0:
+            # TODO: invest when sampling results in better kendall scores on validation set
+            # and scores after sampling are close LB scores
+            # Currently, use sampling for both training and validation
+            if not test:
                 runtime_sampled, config_indices = sample_configs(
                     runtime, max_configs
                 )
@@ -202,7 +206,9 @@ class LayoutDataset(Dataset):
 
             if self.config_edges:
                 record["config_edge_index"] = get_config_graph(
-                    record["edge_index"], record["node_config_ids"]
+                    record["edge_index"],
+                    record["node_config_ids"],
+                    full_connection=self.config_edges == "full_connect",
                 )
 
             self.data.append(record)
@@ -274,7 +280,6 @@ class LayoutDataset(Dataset):
         return sample
 
 
-# TODO: no shuffle when max_configs < 0
 def sample_configs(
     config_runtime: np.array, max_configs: int
 ) -> (np.array, np.array):

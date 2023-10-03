@@ -3,13 +3,22 @@ from collections import defaultdict, deque
 import numpy as np
 
 
-def get_config_graph(origin_edges: np.array, config_node_ids: np.array):
+def get_config_graph(
+    origin_edges: np.array,
+    config_node_ids: np.array,
+    full_connection: bool = False,
+):
     g = Graph()
 
     for src, tgt in origin_edges:
         g.add_edge(src, tgt)
 
-    trimmed_graph = g.trim_and_merge(config_node_ids.tolist())
+    if full_connection:
+        trimmed_graph = g.trim_and_merge_full_connection(
+            config_node_ids.tolist()
+        )
+    else:
+        trimmed_graph = g.trim_and_merge(config_node_ids.tolist())
 
     trimmed_edges = []
     edge_mapping = {node: i for i, node in enumerate(config_node_ids)}
@@ -33,6 +42,10 @@ class Graph:
         self.graph[u].add(v)
 
     def trim_and_merge(self, specified_nodes: list):
+        """Get graph of specified nodes and their neighbors.
+        Trim those nodes that are not specified.
+        If there is a path a->b->c, then c will not be a's neighbor.
+        """
         trimmed_graph = defaultdict(set)
         visited_global = set()  # to keep track of globally visited nodes
         specified_nodes = set(specified_nodes)
@@ -57,6 +70,9 @@ class Graph:
         return trimmed_graph
 
     def trim_and_merge_full_connection(self, specified_nodes: list):
+        """Get graph of specified nodes and their neighbors.
+        If there is a path a->b->c, both b and c will be a's neighbor.
+        """
         trimmed_graph = defaultdict(set)
 
         specified_nodes = set(specified_nodes)
