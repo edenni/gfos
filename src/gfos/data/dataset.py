@@ -36,7 +36,7 @@ class Normalizer:
         )
 
     @classmethod
-    def from_configs(
+    def from_dict(
         cls,
         configs: dict,
         source: Literal["xla", "nlp"],
@@ -76,6 +76,13 @@ class Normalizer:
                 node_config_feat_min=node_config_feat_min,
                 node_config_feat_max=node_config_feat_max,
             )
+
+    @classmethod
+    def from_json(cls, path, source, search):
+        import json
+
+        json_data = json.load(open(path))
+        return Normalizer.from_dict(json_data, source, search)
 
 
 class LazyLayoutDataset(Dataset):
