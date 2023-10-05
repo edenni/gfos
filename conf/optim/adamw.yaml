@@ -1,0 +1,4 @@
+__target__: torch.optim.AdamW
+
+params: ???
+weight_decay: 1e-7

@@ -1,0 +1,6 @@
+source: ?
+search: ?
+max_configs: 6400
+num_configs: 128
+config_edges: simple
+normalizer_path: ${paths.root_dir}/data/normalizer.json
