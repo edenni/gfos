@@ -1,4 +1,6 @@
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -177,6 +179,7 @@ class LayoutDataset(Dataset):
         config_edges: Literal["simple", "full_connect"] = None,
         normalizer: Normalizer = None,
         test: bool = False,  # TODO: remove
+        cls_labels: str = None,  # model cls json file
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
@@ -184,11 +187,14 @@ class LayoutDataset(Dataset):
         self.config_edges = config_edges
         self.normalizer = normalizer
 
+        if cls_labels is not None and os.path.exists(cls_labels):
+            self.cls_labels = json.load(open(cls_labels))
+
         self.data = []
 
         for file in tqdm(self.files, desc="Loading data"):
             record = dict(np.load(file))
-            model_id = file.split("\\")[-1].split(".")[0]
+            model_id = Path(file).stem
             record["model_id"] = model_id
             runtime = record["config_runtime"]
             runtime = (runtime - runtime.min()) / (
@@ -217,6 +223,9 @@ class LayoutDataset(Dataset):
                     record["node_config_ids"],
                     full_connection=self.config_edges == "full_connect",
                 )
+
+            if self.cls_labels is not None:
+                record["cls_label"] = self.cls_labels[model_id]
 
             self.data.append(record)
 
@@ -283,6 +292,11 @@ class LayoutDataset(Dataset):
                 dtype=torch.long,
             )
             sample["config_edge_index"] = config_edge_index
+
+        if "cls_label" in record:
+            sample["cls_label"] = torch.tensor(
+                record["cls_label"], dtype=torch.long
+            )
 
         return sample
 
