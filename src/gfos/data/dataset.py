@@ -187,8 +187,10 @@ class LayoutDataset(Dataset):
         self.config_edges = config_edges
         self.normalizer = normalizer
 
-        if cls_labels is not None and os.path.exists(cls_labels):
+        if cls_labels is not None and Path(cls_labels).exists():
             self.cls_labels = json.load(open(cls_labels))
+        else:
+            self.cls_labels = None
 
         self.data = []
 
@@ -197,9 +199,11 @@ class LayoutDataset(Dataset):
             model_id = Path(file).stem
             record["model_id"] = model_id
             runtime = record["config_runtime"]
-            runtime = (runtime - runtime.min()) / (
-                runtime.max() - runtime.min()
-            )
+            # runtime = (runtime - runtime.min()) / (
+            #     runtime.max() - runtime.min()
+            # )
+            runtime = (runtime - runtime.mean()) / runtime.std()
+            # runtime /= np.linalg.norm(runtime)
 
             # TODO: invest when sampling results in better kendall scores on validation set
             # and scores after sampling are close LB scores
