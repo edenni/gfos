@@ -329,3 +329,154 @@ def sample_configs(
     )
 
     return config_runtime[keep_indices], keep_indices
+
+
+class LayoutDatasetPreset(Dataset):
+    """Load all data in advance."""
+
+    def __init__(
+        self,
+        files: list[str],
+        max_configs: int = -1,
+        num_configs: int = -1,
+        config_edges: Literal["simple", "full_connect"] = None,
+        normalizer: Normalizer = None,
+        test: bool = False,  # TODO: remove
+        cls_labels: str = None,  # model cls json file
+        indices_dir: str = None,
+        fold: int = None,
+    ):
+        self.max_configs = max_configs
+        self.num_configs = num_configs
+        self.files = files
+        self.config_edges = config_edges
+        self.normalizer = normalizer
+
+        if cls_labels is not None and Path(cls_labels).exists():
+            self.cls_labels = json.load(open(cls_labels))
+        else:
+            self.cls_labels = None
+
+        if (
+            indices_dir is not None
+            and fold is not None
+            and (Path(indices_dir) / str(fold)).exists()
+        ):
+            self.indices_dir = Path(indices_dir) / str(fold)
+            print(f"Using indices from {self.indices_dir}")
+
+        self.data = []
+
+        for file in tqdm(self.files, desc="Loading data"):
+            record = dict(np.load(file))
+            model_id = Path(file).stem
+            record["model_id"] = model_id
+            runtime = record["config_runtime"]
+            # runtime = (runtime - runtime.min()) / (
+            #     runtime.max() - runtime.min()
+            # )
+            runtime = (runtime - runtime.mean()) / runtime.std()
+            # runtime /= np.linalg.norm(runtime)
+
+            # TODO: invest when sampling results in better kendall scores on validation set
+            # and scores after sampling are close LB scores
+            # Currently, use sampling for both training and validation
+            if not test:
+                indices_file = self.indices_dir / f"{model_id}.npy"
+                if indices_file.exists():
+                    config_indices = np.load(indices_file)
+                    runtime_sampled = runtime[config_indices]
+                # runtime_sampled, config_indices = sample_configs(
+                #     runtime, max_configs
+                # )
+            else:
+                runtime_sampled = runtime
+                config_indices = torch.arange(len(runtime))
+
+            record["config_runtime"] = runtime_sampled
+            record["node_config_feat"] = record["node_config_feat"][
+                config_indices
+            ]
+
+            if self.config_edges:
+                record["config_edge_index"] = get_config_graph(
+                    record["edge_index"],
+                    record["node_config_ids"],
+                    full_connection=self.config_edges == "full_connect",
+                )
+
+            if self.cls_labels is not None:
+                record["cls_label"] = self.cls_labels[model_id]
+
+            self.data.append(record)
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx) -> dict[str, Any]:
+        record = self.data[idx]
+        config_runtime = torch.tensor(
+            record["config_runtime"], dtype=torch.float
+        )
+
+        if self.num_configs > 0:
+            num_configs = self.num_configs
+        elif self.max_configs > 0:
+            num_configs = self.max_configs
+        else:
+            num_configs = config_runtime.size(0)
+
+        # Shuffle
+        if self.max_configs > 0 or self.num_configs > 0:
+            config_indices = torch.randperm(config_runtime.size(0))[
+                :num_configs
+            ]
+        else:
+            config_indices = torch.arange(num_configs)
+        config_runtime = config_runtime[config_indices]
+
+        model_id = record["model_id"]
+        node_feat = torch.tensor(record["node_feat"], dtype=torch.float)
+        node_opcode = torch.tensor(record["node_opcode"], dtype=torch.long)
+        edge_index = torch.tensor(
+            np.swapaxes(record["edge_index"], 0, 1), dtype=torch.long
+        )
+
+        node_config_feat = torch.tensor(
+            record["node_config_feat"], dtype=torch.float
+        )
+        node_config_feat = node_config_feat[config_indices]
+
+        node_config_ids = torch.tensor(
+            record["node_config_ids"], dtype=torch.long
+        )
+
+        if self.normalizer is not None:
+            node_feat = self.normalizer.normalize_node_feat(node_feat)
+            node_config_feat = self.normalizer.normalize_node_config_feat(
+                node_config_feat
+            )
+
+        sample = dict(
+            model_id=model_id,
+            node_feat=node_feat,
+            node_opcode=node_opcode,
+            edge_index=edge_index,
+            node_config_feat=node_config_feat,
+            node_config_ids=node_config_ids,
+            config_runtime=config_runtime,
+        )
+
+        if self.config_edges:
+            config_edge_index = torch.tensor(
+                np.swapaxes(record["config_edge_index"], 0, 1),
+                dtype=torch.long,
+            )
+            sample["config_edge_index"] = config_edge_index
+
+        if "cls_label" in record:
+            sample["cls_label"] = torch.tensor(
+                record["cls_label"], dtype=torch.long
+            )
+
+        return sample
