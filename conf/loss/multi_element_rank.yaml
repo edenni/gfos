@@ -1,0 +1,4 @@
+_target_: gfos.loss.MultiElementRankLoss
+
+margin: 0.5
+number_permutations: 100

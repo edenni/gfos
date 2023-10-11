@@ -4,7 +4,7 @@
 root_dir: .
 
 # path to data directory
-layout_data_dir: H:\\data\\gfos\\predict-ai-model-runtime\\npz_all\\npz\\layout
+layout_dir: ${paths.root_dir}/data/npz_all/npz/layout #H:\data\gfos\predict-ai-model-runtime\npz_all\npz\layout
 
 # path to logging directory
 log_dir: ${paths.root_dir}/logs

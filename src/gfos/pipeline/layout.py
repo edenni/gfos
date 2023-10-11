@@ -1,14 +1,20 @@
 import logging
 import os
+import datetime
 
+import wandb
 import torch
+from torch import optim
 from hydra.utils import instantiate
-
+import numpy as np
 from ..data.dataset import LayoutDataset, Normalizer
 from ..data.utils import load_layout
 from ..loss import MultiElementRankLoss
 from ..model.gnn import LayoutModel
 from .base import Pipeline
+from ..utils.logging import flatten_dict
+from tqdm import tqdm
+from ..metrics import kendall, topk_error
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +42,11 @@ class LayoutPipeline(Pipeline):
 
         # Check if layout directory exists
         if not os.path.exists(layout_dir):
-            raise FileNotFoundError(
-                f"Layout directory {layout_dir} does not exist"
-            )
+            raise FileNotFoundError(f"Layout directory {layout_dir} does not exist")
 
         # Check if normalizer exists
         if normalizer_path and not os.path.exists(normalizer_path):
-            raise FileNotFoundError(
-                f"Normalizer {normalizer_path} does not exist"
-            )
+            raise FileNotFoundError(f"Normalizer {normalizer_path} does not exist")
 
         # Load layout files
         logger.info(f"Loading layout from {layout_dir}")
@@ -53,13 +55,11 @@ class LayoutPipeline(Pipeline):
         )
 
         # Load normalizer
-        normalizer = Normalizer.from_json(
-            normalizer_path, source=source, search=search
-        )
+        normalizer = Normalizer.from_json(normalizer_path, source=source, search=search)
 
         # Create training and validation dataset
         self.train_dataset = LayoutDataset(
-            files=layout_files,
+            files=layout_files["train"],
             max_configs=max_configs,
             num_configs=num_configs,
             config_edges=config_edges,
@@ -67,107 +67,112 @@ class LayoutPipeline(Pipeline):
         )
 
         self.valid_dataset = LayoutDataset(
-            files=layout_files,
+            files=layout_files["valid"],
             config_edges=config_edges,
             normalizer=normalizer,
         )
 
+    @property
+    def device(self):
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     def _setup_model(self):
-        conv_layer = self.cfg.model.conv_layer
-        op_embedding_dim = self.cfg.model.op_embedding_dim
-        config_dim = self.cfg.model.config_dim
-        graph_dim = self.cfg.model.graph_dim
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        """Setup model, loss function, optimizer, and scheduler"""
+        # Create model
         node_feat_dim = self.train_dataset[0]["node_feat"].shape[-1]
         node_config_dim = self.train_dataset[0]["node_config_feat"].shape[-1]
-        model = instantiate(
+        self.model = instantiate(
             self.cfg.model,
             node_feat_dim=node_feat_dim,
             node_config_dim=node_config_dim,
-        ).to(device)
+        ).to(self.device)
 
-        criterion = MultiElementRankLoss(
-            margin=margin, number_permutations=number_permutations
-        )
+        # Loss function
+        self.criterion = instantiate(self.cfg.loss)
 
-        optimizer = optim.AdamW(
+        # Optimizer
+        lr = self.cfg.optimizer.lr
+        self.optimizer = instantiate(
+            self.cfg.optimizer,
             [
                 {
                     "name": "lr_embed",
-                    "params": model.embedding.parameters(),
-                    "lr": learning_rate / 10,
+                    "params": self.model.embedding.parameters(),
+                    "lr": lr / 10,
                 },
                 {
                     "name": "lr_model_gnn",
-                    "params": model.model_gnn.parameters(),
-                    "lr": learning_rate / 10,
+                    "params": self.model.model_gnn.parameters(),
+                    "lr": lr / 10,
                 },
                 {
                     "name": "lr_config_prj",
-                    "params": model.config_prj.parameters(),
-                    "lr": learning_rate / 10,
+                    "params": self.model.config_prj.parameters(),
+                    "lr": lr / 10,
                 },
                 {
                     "name": "lr_config_mp",
-                    "params": model.config_mp.parameters(),
-                    "lr": learning_rate / 10,
+                    "params": self.model.config_mp.parameters(),
+                    "lr": lr / 10,
                 },
                 {
                     "name": "lr_config_gnn",
-                    "params": model.config_gnn.parameters(),
-                    "lr": learning_rate,
+                    "params": self.model.config_gnn.parameters(),
+                    "lr": lr,
                 },
                 {
                     "name": "lr_dense",
-                    "params": model.dense.parameters(),
-                    "lr": learning_rate,
+                    "params": self.model.dense.parameters(),
+                    "lr": lr,
                 },
             ],
-            betas=[0.85, 0.9],
-            weight_decay=weight_decay,
         )
+        print(self.optimizer)
 
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer=optimizer,
-            mode="max",
-            factor=0.1,
-            patience=2,  # 5 times evaluation = 5 * NUM_VAL_EPOCHS epochs
-            threshold=0.01,
-            min_lr=min_lr,
+        self.scheduler = instantiate(
+            self.cfg.scheduler,
+            optimizer=self.optimizer,
         )
 
     def train(self):
-        if not DEBUG:
+        self._setup_model()
+
+        use_logger: bool = self.cfg.get("logger") is not None
+        if use_logger:
             run = wandb.init(
-                project=WANDB_PROJECT,
-                dir=WANDB_DIR,
-                name=WANDB_RUN_NAME,
-                config=configs,
-                tags=TAGS,
+                project=self.cfg.logger.project,
+                dir=self.cfg.logger.dir,
+                name=self.cfg.logger.name,
+                config=flatten_dict(self.cfg),
+                tags=self.cfg.logger.tags,
             )
-            run.watch(model, log="all")
-            run.log_code("../")
+            run.watch(self.model, log="all")
 
             time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_dir = f"../../logs/{WANDB_RUN_NAME}/{time_str}"
+            log_dir = f"../../logs/{self.cfg.logger.name}/{time_str}"
             os.makedirs(log_dir, exist_ok=True)
 
+        device = self.device
+        num_epochs = self.cfg.trainer.num_epochs
+        num_val_epochs = self.cfg.trainer.num_val_epochs
+        infer_bs = self.cfg.trainer.infer_bs
+        accum_iter = self.cfg.trainer.accum_iter
+        grad_clip = self.cfg.trainer.grad_clip
+
         best_score = -1
+        loss_mean = 0
 
         # scaler = GradScaler()
-        loss_mean = 0
         for epoch in range(num_epochs):
             # Shuffle the training dataset
-            permutation = np.random.permutation(len(train_dataset))
+            permutation = np.random.permutation(len(self.train_dataset))
 
             # Training phase
-            model.train()
-            pbar = tqdm(permutation, leave=False)
+            self.model.train()
+            pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
 
             for i in pbar:
-                record = train_dataset[i]
+                record = self.train_dataset[i]
                 node_feat = record["node_feat"]
                 node_opcode = record["node_opcode"]
                 edge_index = record["edge_index"]
@@ -195,7 +200,7 @@ class LayoutPipeline(Pipeline):
                 )
 
                 # with autocast():
-                out = model(
+                out = self.model(
                     node_feat,
                     node_opcode,
                     edge_index,
@@ -204,33 +209,30 @@ class LayoutPipeline(Pipeline):
                     config_edge_index,
                 )
 
-                loss = criterion(out, config_runtime)
+                loss = self.criterion(out, config_runtime)
                 loss = loss / accum_iter
                 loss_mean += loss.item()
                 loss.backward()
                 # scaler.scale(loss).backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                if grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip)
 
-                pbar.set_description(f"epoch: {epoch} loss: {loss_mean:.4f}")
+                pbar.set_postfix_str(f"loss: {loss_mean:.4f}")
 
-                if ((i + 1) % accum_iter == 0) or (
-                    i + 1 == len(train_dataset)
+                if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
+                    i + 1 == len(self.train_dataset)
                 ):
                     # scaler.step(optimizer)
                     # scaler.update()
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
 
-                    if not DEBUG:
+                    if use_logger:
                         wandb.log(
                             {
                                 "epoch": epoch,
-                                "train/lr_slow": optimizer.param_groups[0][
-                                    "lr"
-                                ],
-                                "train/lr_fast": optimizer.param_groups[-1][
-                                    "lr"
-                                ],
+                                "train/lr_slow": self.optimizer.param_groups[0]["lr"],
+                                "train/lr_fast": self.optimizer.param_groups[-1]["lr"],
                                 "train/loss": loss_mean,
                             }
                         )
@@ -238,21 +240,21 @@ class LayoutPipeline(Pipeline):
 
             pbar.close()
 
-            if (epoch + 1) % NUM_VAL_EPOCHS != 0 and epoch != num_epochs - 1:
+            if (epoch + 1) % num_val_epochs != 0 and epoch != num_epochs - 1:
                 continue
 
-            model.eval()
+            self.model.eval()
 
             # Validation phase
             # Scores placeholder
-            val_loss = []
             kendalltau_scores = []
-            opa_scores = []
+            raw_kendalltau_scores = []
             top500_scores = []
             top100_scores = []
 
+            pbar = tqdm(self.valid_dataset, desc=f"Epoch: {epoch}", leave=True)
             with torch.no_grad():
-                for record in tqdm(val_dataset, desc="valid", leave=False):
+                for record in pbar:
                     node_feat = record["node_feat"]
                     node_opcode = record["node_opcode"]
                     edge_index = record["edge_index"]
@@ -280,13 +282,9 @@ class LayoutPipeline(Pipeline):
                     num_configs = config_runtime.shape[-1]
                     outs = []
 
-                    for i in range(
-                        0, num_configs, INFERENCE_CONFIGS_BATCH_SIZE
-                    ):
-                        end_i = min(
-                            i + INFERENCE_CONFIGS_BATCH_SIZE, num_configs
-                        )
-                        out: torch.Tensor = model(
+                    for i in range(0, num_configs, infer_bs):
+                        end_i = min(i + infer_bs, num_configs)
+                        out: torch.Tensor = self.model(
                             node_feat,
                             node_opcode,
                             edge_index,
@@ -301,47 +299,43 @@ class LayoutPipeline(Pipeline):
                     kendalltau_scores.append(
                         kendall(np.argsort(outs), np.argsort(config_runtime))
                     )
-                    # opa_scores.append(opa(config_runtime[None], outs[None]))
-                    top100_scores.append(
-                        topk_error(outs, config_runtime, top_k=100)
-                    )
-                    top500_scores.append(
-                        topk_error(outs, config_runtime, top_k=500)
-                    )
+                    raw_kendalltau_scores.append(kendall(outs, config_runtime))
+                    top100_scores.append(topk_error(outs, config_runtime, top_k=100))
+                    top500_scores.append(topk_error(outs, config_runtime, top_k=500))
 
             kendalltau_mean = np.mean(kendalltau_scores)
-            # opa_mean = np.mean(opa_scores)
+            raw_kendalltau_mean = np.mean(raw_kendalltau_scores)
             top100_mean = np.mean(top100_scores)
             top500_mean = np.mean(top500_scores)
-            scheduler.step(kendalltau_mean)
 
-            if not DEBUG:
+            self.scheduler.step(kendalltau_mean)
+
+            if use_logger:
                 wandb.log(
                     {
                         "val/kendalltau": kendalltau_mean,
-                        # "val/opa": opa_mean,
+                        "val/raw_kendalltau": raw_kendalltau_mean,
                         "val/top100_error": top100_mean,
                         "val/top500_error": top500_mean,
                     }
                 )
 
             print(
-                f"epoch {epoch}, kendall = {kendalltau_mean:.4f}, "
-                # f"opa = {opa_mean:.4f}, "
+                f"epoch {epoch}, kendall = {raw_kendalltau_mean:.4f}, "
                 f"top500 = {top500_mean:.4f}"
             )
 
             # Update best scores and save the model if the mean score improves
-            if kendalltau_mean > best_score:
-                best_score = kendalltau_mean
+            if raw_kendalltau_mean > best_score:
+                best_score = raw_kendalltau_mean
                 print(f"Best score updated: {best_score:.4f}")
-                if not DEBUG:
-                    filename = f"{epoch}_{kendalltau_mean:.4f}.pth"
+                if use_logger:
+                    filename = f"{epoch}_{best_score:.4f}.pth"
                     path = os.path.join(wandb.run.dir, filename)
                     torch.save(
-                        model.state_dict(),
+                        self.model.state_dict(),
                         path,
                     )
 
-        if not DEBUG:
+        if use_logger:
             run.finish()

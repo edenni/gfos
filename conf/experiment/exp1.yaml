@@ -1,0 +1,32 @@
+# @package _global_
+
+defaults:
+  - override /model: layout
+  - override /optimizer: adamw
+  - override /scheduler: plateau
+  - override /loss: multi_element_rank
+  # - override /logger: 
+  - override /dataset: layout
+  - override /trainer: layout
+
+dataset:
+  source: xla
+  search: random
+
+hydra:
+  job:
+    name: ${run_name}
+
+# logger:
+#   project: ${project}
+#   group: 
+#   name: ${run_name}
+#   tags: ["rnn", "cv"]
+#   job_type: ${task}
+
+trainer:
+  max_epochs: 150
+
+run_name: layout_debug
+pipeline: layout  # available pipelines defined in src/*/pipeline/
+task: train  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

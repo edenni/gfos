@@ -1,5 +1,7 @@
-source: ?
-search: ?
+_target_: gfos.data.dataset.LayoutDataset
+
+source: ???
+search: ???
 max_configs: 6400
 num_configs: 128
 config_edges: simple
