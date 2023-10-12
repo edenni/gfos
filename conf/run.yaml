@@ -3,11 +3,12 @@
 defaults:
   - paths: default
   - hydra: default
-  - callbacks: null
-  - data: null
+  - dataset: null
   - model: null
+  - optimizer: null
+  - scheduler: null
+  - loss: null
   - logger: null
-  - sweep: null
   - trainer: null
   - _self_
 
@@ -20,10 +21,5 @@ tags:
 pipeline: train
 seed: 42
 task: cv
-cv: 5
-tune: null
-
-main_metric: val/f1
-matric_mode: max
 
 project: 

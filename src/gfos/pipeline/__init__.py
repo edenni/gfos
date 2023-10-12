@@ -1,7 +1,6 @@
-from psp.pipeline.gbdt import GBDTPipeline
-from psp.pipeline.rnn import RNNPipeline
+from gfos.pipeline.layout import LayoutPipeline
+
 
 pipelines = {
-    "gbdt": GBDTPipeline,
-    "rnn": RNNPipeline,
+    LayoutPipeline.pipeline_name: LayoutPipeline,
 }

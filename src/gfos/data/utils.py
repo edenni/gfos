@@ -1,4 +1,5 @@
 import os
+import sys
 from collections import defaultdict
 
 
@@ -39,7 +40,10 @@ def load_layout(
     ]
 
     for path in dirs:
-        split = path.split("\\")[-1]
+        if "win" in sys.platform:
+            split = path.split("\\")[-1]
+        else:
+            split = path.split("/")[-1]
         files = os.listdir(path)
 
         dfs[split] += [os.path.join(path, file) for file in files]

@@ -10,7 +10,7 @@ from gfos.utils.rich import print_config_tree
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(version_base=None, config_path="../../conf", config_name="train")
+@hydra.main(version_base=None, config_path="../../conf", config_name="run")
 def main(cfg: DictConfig):
     if cfg.pipeline not in pipelines:
         raise NotImplementedError(
