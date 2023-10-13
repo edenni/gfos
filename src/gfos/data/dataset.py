@@ -222,14 +222,48 @@ class LayoutDataset(Dataset):
             ]
 
             if self.config_edges:
-                record["config_edge_index"] = get_config_graph(
+                config_edge_index = get_config_graph(
                     record["edge_index"],
                     record["node_config_ids"],
                     full_connection=self.config_edges == "full_connect",
                 )
+                config_edge_index = torch.tensor(
+                    np.swapaxes(config_edge_index, 0, 1),
+                    dtype=torch.long,
+                )
+                record["config_edge_index"] = config_edge_index
 
             if self.cls_labels is not None:
                 record["cls_label"] = self.cls_labels[model_id]
+
+            record["config_runtime"] = torch.tensor(
+                record["config_runtime"], dtype=torch.float
+            )
+            record["node_feat"] = torch.tensor(
+                record["node_feat"], dtype=torch.float
+            )
+            record["node_opcode"] = torch.tensor(
+                record["node_opcode"], dtype=torch.long
+            )
+            record["edge_index"] = torch.tensor(
+                np.swapaxes(record["edge_index"], 0, 1), dtype=torch.long
+            )
+            record["node_config_feat"] = torch.tensor(
+                record["node_config_feat"], dtype=torch.float
+            )
+            record["node_config_ids"] = torch.tensor(
+                record["node_config_ids"], dtype=torch.long
+            )
+
+            if self.normalizer is not None:
+                record["node_feat"] = self.normalizer.normalize_node_feat(
+                    record["node_feat"]
+                )
+                record[
+                    "node_config_feat"
+                ] = self.normalizer.normalize_node_config_feat(
+                    record["node_config_feat"]
+                )
 
             self.data.append(record)
 
@@ -238,9 +272,15 @@ class LayoutDataset(Dataset):
 
     def __getitem__(self, idx) -> dict[str, Any]:
         record = self.data[idx]
-        config_runtime = torch.tensor(
-            record["config_runtime"], dtype=torch.float
-        )
+        # config_runtime = torch.tensor(
+        #     record["config_runtime"], dtype=torch.float
+        # )
+        config_runtime = record["config_runtime"]
+        node_feat = record["node_feat"]
+        node_opcode = record["node_opcode"]
+        edge_index = record["edge_index"]
+        node_config_feat = record["node_config_feat"]
+        node_config_ids = record["node_config_ids"]
 
         if self.num_configs > 0:
             num_configs = self.num_configs
@@ -259,26 +299,20 @@ class LayoutDataset(Dataset):
         config_runtime = config_runtime[config_indices]
 
         model_id = record["model_id"]
-        node_feat = torch.tensor(record["node_feat"], dtype=torch.float)
-        node_opcode = torch.tensor(record["node_opcode"], dtype=torch.long)
-        edge_index = torch.tensor(
-            np.swapaxes(record["edge_index"], 0, 1), dtype=torch.long
-        )
+        # node_feat = torch.tensor(record["node_feat"], dtype=torch.float)
+        # node_opcode = torch.tensor(record["node_opcode"], dtype=torch.long)
+        # edge_index = torch.tensor(
+        #     np.swapaxes(record["edge_index"], 0, 1), dtype=torch.long
+        # )
 
-        node_config_feat = torch.tensor(
-            record["node_config_feat"], dtype=torch.float
-        )
+        # node_config_feat = torch.tensor(
+        #     record["node_config_feat"], dtype=torch.float
+        # )
         node_config_feat = node_config_feat[config_indices]
 
-        node_config_ids = torch.tensor(
-            record["node_config_ids"], dtype=torch.long
-        )
-
-        if self.normalizer is not None:
-            node_feat = self.normalizer.normalize_node_feat(node_feat)
-            node_config_feat = self.normalizer.normalize_node_config_feat(
-                node_config_feat
-            )
+        # node_config_ids = torch.tensor(
+        #     record["node_config_ids"], dtype=torch.long
+        # )
 
         sample = dict(
             model_id=model_id,
@@ -291,11 +325,7 @@ class LayoutDataset(Dataset):
         )
 
         if self.config_edges:
-            config_edge_index = torch.tensor(
-                np.swapaxes(record["config_edge_index"], 0, 1),
-                dtype=torch.long,
-            )
-            sample["config_edge_index"] = config_edge_index
+            sample["config_edge_index"] = record["config_edge_index"]
 
         if "cls_label" in record:
             sample["cls_label"] = torch.tensor(
