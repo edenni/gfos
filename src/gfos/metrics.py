@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import torch
 from scipy.stats import kendalltau
@@ -82,3 +84,64 @@ class TopKError(Metric):
     def compute(self):
         top_k_error = self.error.float() / self.total
         return top_k_error
+
+
+class LayoutMetrics:
+    def __init__(self) -> None:
+        self.model_ids: list[str] = []
+        self.preds: list[torch.Tensor] = []
+        self.targets: list[torch.Tensor] = []
+
+    def add(
+        self, model_id: str, preds: torch.Tensor, targets: torch.Tensor
+    ) -> None:
+        assert isinstance(model_id, str)
+        preds = preds.cpu()
+        targets = targets.cpu()
+
+        self.model_ids.append(model_id)
+        self.preds.append(preds)
+        self.targets.append(targets)
+
+    @property
+    def raw_kendall(self) -> list[float]:
+        return [
+            kendall(pred, target)
+            for pred, target in zip(self.preds, self.targets)
+        ]
+
+    @property
+    def index_kendall(self) -> list[float]:
+        kendalls = []
+        for pred, target in zip(self.preds, self.targets):
+            sorted_target, sorted_index = torch.sort(target)
+            sorted_preds = pred[sorted_index]
+            kendalls.append(
+                kendall(sorted_preds.argsort(), sorted_target.argsort())
+            )
+        return kendalls
+
+    @property
+    def top100_error(self) -> list[float]:
+        return [
+            topk_error(pred, target, top_k=100)
+            for pred, target in zip(self.preds, self.targets)
+        ]
+
+    @property
+    def top500_error(self) -> list[float]:
+        return [
+            topk_error(pred, target, top_k=500)
+            for pred, target in zip(self.preds, self.targets)
+        ]
+
+    def compute_scores(self) -> dict[str, float]:
+        return {
+            "raw_kendall": np.mean(self.raw_kendall),
+            "index_kendall": np.mean(self.index_kendall),
+            "top100_error": np.mean(self.top100_error),
+            "top500_error": np.mean(self.top500_error),
+        } + {
+            f"kendall_{model}": score
+            for model, score in zip(self.model_ids, self.index_kendall)
+        }
