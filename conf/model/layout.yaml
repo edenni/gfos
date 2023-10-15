@@ -1,8 +1,22 @@
 _target_: gfos.model.gnn.LayoutModel
 
-conv_layer: SAGEConv
-op_embedding_dim: 32
-config_dim: 64
-graph_dim: 64
+num_opcodes: 120
 node_feat_dim: ???
 node_config_dim: ???
+op_embedding_dim: 32
+
+node_layer: SAGEConv
+num_node_layer: 4
+node_dim: 64
+
+config_neighbor_layer: GATConv
+num_config_neighbor_layers: 2
+config_neighbor_dim: 64
+
+config_layer: SAGEConv
+num_config_layers: 4
+config_dim: 64
+
+head_dim: 64
+dropout: 0.1
+activation: LeakyReLU

@@ -127,7 +127,6 @@ class LayoutPipeline(Pipeline):
                 },
             ],
         )
-        print(self.optimizer)
 
         self.scheduler = instantiate(
             self.cfg.scheduler,

@@ -11,86 +11,61 @@ from .utils import aggregate_neighbors
 class LayoutModel(torch.nn.Module):
     def __init__(
         self,
-        conv_layer: Literal["GATConv", "GCNConv", "SAGEConv"],
-        op_embedding_dim: int = 32,
-        config_dim: int = 64,
-        graph_dim: int = 64,
+        num_opcodes: int = 120,
         node_feat_dim: int = 140,
         node_config_dim: int = 18,
+        op_embedding_dim: int = 32,
+        node_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
+        num_node_layers: int = 3,
+        node_dim: int = 64,
+        config_neighbor_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
+        num_config_neighbor_layers: int = 3,
+        config_neighbor_dim: int = 64,
+        config_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
+        num_config_layers: int = 3,
+        config_dim: int = 64,
+        head_dim: int = 64,
+        dropout: float = 0.0,
+        activation: str = "LeakyReLU",
     ):
         super().__init__()
 
-        NUM_OPCODE = 120
-
         conv_layer = getattr(geonn, conv_layer)
 
-        merged_node_dim = 2 * graph_dim + config_dim
+        merged_node_dim = 2 * node_dim + config_dim
 
         self.embedding = torch.nn.Embedding(
-            NUM_OPCODE,
+            num_opcodes,
             op_embedding_dim,
         )
         in_channels = op_embedding_dim + node_feat_dim
 
-        # TODO: create skip connection conv module
-        self.model_gnn = geonn.Sequential(
-            "x, edge_index",
-            [
-                (conv_layer(in_channels, graph_dim), "x, edge_index -> x1"),
-                nn.LeakyReLU(inplace=True),
-                (conv_layer(graph_dim, graph_dim), "x1, edge_index -> x2"),
-                (lambda x1, x2: x1 + x2, "x1, x2 -> x3"),
-                nn.LeakyReLU(inplace=True),
-                (conv_layer(graph_dim, graph_dim), "x3, edge_index -> x4"),
-                nn.LeakyReLU(inplace=True),
-                (conv_layer(graph_dim, graph_dim), "x4, edge_index -> x5"),
-                (lambda x4, x5: x4 + x5, "x4, x5 -> x6"),
-                nn.LeakyReLU(inplace=True),
-                # (conv_layer(graph_dim, graph_dim), "x5, edge_index -> x6"),
-                # nn.LeakyReLU(inplace=True),
-                # (conv_layer(graph_dim, graph_dim), "x6, edge_index -> x7"),
-                # (lambda x6, x7: x6 + x7, "x6, x7 -> x8"),
-                # nn.LeakyReLU(inplace=True),
-                # (conv_layer(graph_dim, graph_dim), "x8, edge_index -> x9"),
-                # nn.LeakyReLU(inplace=True),
-                # (conv_layer(graph_dim, graph_dim), "x9, edge_index -> x10"),
-                # (lambda x9, x10: x9 + x10, "x9, x10 -> x11"),
-                # nn.LeakyReLU(inplace=True),
-            ],
+        self.node_gnn = self._create_conv_module(
+            conv_layer=node_layer,
+            node_layers=num_node_layers,
+            in_channels=in_channels,
+            hidden_channels=node_dim,
+            out_channels=node_dim,
+            activation=activation,
         )
 
-        self.config_mp = geonn.Sequential(
-            "x, edge_index",
-            [
-                (geonn.GATConv(graph_dim, graph_dim), "x, edge_index -> x1"),
-                nn.LeakyReLU(inplace=True),
-                (geonn.GATConv(graph_dim, graph_dim), "x1, edge_index -> x2"),
-                (lambda x1, x2: x1 + x2, "x1, x2 -> x3"),
-                nn.LeakyReLU(inplace=True),
-            ],
+        self.config_neighbor_gnn = self._create_conv_module(
+            conv_layer=config_neighbor_layer,
+            num_layers=num_config_neighbor_layers,
+            in_channels=node_dim,
+            hidden_channels=config_neighbor_dim,
+            out_channels=config_neighbor_dim,
+            activation=activation,
         )
 
-        self.config_gnn = geonn.Sequential(
-            "x, edge_index",
-            [
-                (nn.Dropout(p=0.2), "x -> x"),
-                (
-                    conv_layer(merged_node_dim, config_dim),
-                    "x, edge_index -> x1",
-                ),
-                nn.LeakyReLU(inplace=True),
-                (conv_layer(config_dim, config_dim), "x1, edge_index -> x2"),
-                (lambda x1, x2: x1 + x2, "x1, x2 -> x3"),
-                nn.LeakyReLU(inplace=True),
-                (conv_layer(config_dim, config_dim), "x3, edge_index -> x4"),
-                nn.LeakyReLU(inplace=True),
-                (
-                    conv_layer(config_dim, config_dim),
-                    "x4, edge_index -> x5",
-                ),
-                (lambda x4, x5: x4 + x5, "x4, x5 -> x6"),
-                nn.LeakyReLU(inplace=True),
-            ],
+        self.config_gnn = self._create_conv_module(
+            conv_layer=config_layer,
+            num_layers=num_config_layers,
+            in_channels=merged_node_dim,
+            hidden_channels=config_dim,
+            out_channels=config_dim,
+            activation=activation,
+            dropout=dropout,
         )
 
         self.config_prj = nn.Sequential(
@@ -98,19 +73,71 @@ class LayoutModel(torch.nn.Module):
             nn.LeakyReLU(),
         )
 
-        # self.deg_prj = nn.Sequential(
-        #     nn.Linear(hidden_channels[-1], merged_node_dim, bias=False),
-        #     nn.LayerNorm(merged_node_dim),
-        #     nn.LeakyReLU(),
-        # )
-
         self.dense = torch.nn.Sequential(
-            nn.Dropout(0.2),
-            nn.Linear(config_dim, 64, bias=False),
+            nn.Dropout(dropout),
+            nn.Linear(config_dim, head_dim, bias=False),
             nn.LeakyReLU(),
-            nn.Linear(64, 64, bias=False),
+            nn.Linear(head_dim, head_dim, bias=False),
             nn.LeakyReLU(),
-            nn.Linear(64, 1, bias=False),
+            nn.Linear(head_dim, 1, bias=False),
+        )
+
+    def _create_conv_module(
+        self,
+        conv_layer: str,
+        num_layers: int,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        activation: str,
+        dropout: float = 0.0,
+        **conv_kwargs: dict,
+    ) -> nn.Module:
+        """
+        Create a message passing layer with activation function.
+
+        Args:
+            conv_layer(str): name of the convolution layer
+            num_layers(int): number of layers
+            in_channels(int): number of input channels
+            hidden_channels(int): number of hidden channels
+            out_channels(int): number of output channels
+            activation(str): name of the activation function
+            **conv_kwargs(dict): keyword arguments for convolution layer
+        Returns:
+            nn.Module: a sequential layer with convolution and activation
+        """
+        assert activation in ["relu", "leaky_relu"], f"Invalid activation: {activation}"
+        assert conv_layer in [
+            "GATConv",
+            "GCNConv",
+            "SAGEConv",
+        ], f"Invalid conv layer: {conv_layer}"
+        assert num_layers > 1, f"num_layers must be greater than 1 but got {num_layers}"
+
+        conv_layer = getattr(geonn, conv_layer)
+        activation = getattr(nn, activation)
+
+        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
+
+        conv_layers = []
+        if dropout > 0:
+            conv_layers.append((nn.Dropout(p=dropout), "x -> x"))
+
+        for in_plane, out_plane in zip(channels[:-1], channels[1:]):
+            conv_layers.extend(
+                [
+                    (
+                        conv_layer(in_plane, out_plane, **conv_kwargs),
+                        "x, edge_index -> x",
+                    ),
+                    activation(inplace=True),
+                ]
+            )
+
+        return geonn.Sequential(
+            "x, edge_index",
+            conv_layers,
         )
 
     def forward(
@@ -122,28 +149,24 @@ class LayoutModel(torch.nn.Module):
         node_config_ids: torch.Tensor,
         config_edge_index: torch.Tensor,
     ) -> torch.Tensor:
-        # Get graph features
         c = node_config_feat.size(0)
 
         x = torch.cat([node_feat, self.embedding(node_opcode)], dim=1)
 
-        # Get graph features
-        x = self.model_gnn(x, edge_index)
+        # (N, in_channels) -> (N, node_dim)
+        x = self.node_gnn(x, edge_index)
 
+        # (N, node_dim) -> (NC, node_dim)
         config_neighbors = aggregate_neighbors(x, edge_index)[node_config_ids]
-        config_neighbors = nn.functional.normalize(config_neighbors, dim=-1)
-        config_neighbors = self.config_mp(config_neighbors, config_edge_index)
+        config_neighbors = self.config_neighbor_gnn(config_neighbors, config_edge_index)
 
-        # (N, graph_out) -> (NC, graph_out)
+        # (N, node_dim) -> (NC, node_dim)
         x = x[node_config_ids]
-        # x += config_neighbors
 
-        # Merge graph features with config features
-        # (C, NC, 18) -> (C, NC, config_dim)
+        # (C, NC, node_config_dim) -> (C, NC, config_dim)
         node_config_feat = self.config_prj(node_config_feat)
-        # pos_embedding = self.deg_prj(neighbor_feat)
 
-        # (C, NC, 2*graph_out + config_dim)
+        # (C, NC, merged_node_dim)
         x = torch.cat(
             [
                 config_neighbors.repeat((c, 1, 1)),
@@ -152,18 +175,18 @@ class LayoutModel(torch.nn.Module):
             ],
             dim=-1,
         )
-        # x += pos_embedding
         x = nn.functional.normalize(x, dim=-1)
 
-        datas = [
-            Data(x=x[i], edge_index=config_edge_index)
-            for i in range(x.shape[0])
-        ]
+        datas = [Data(x=x[i], edge_index=config_edge_index) for i in range(x.shape[0])]
         batch = Batch.from_data_list(datas)
 
+        # (C, NC, merged_node_dim) -> (C, NC, config_dim)
         x = self.config_gnn(batch.x, batch.edge_index)
+
+        # (C, NC, config_dim) -> (C, config_dim)
         x = geonn.pool.global_mean_pool(x, batch.batch)
 
+        # (C, config_dim) -> (C,)
         x = self.dense(x).flatten()
 
         return x

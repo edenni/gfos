@@ -12,6 +12,7 @@ defaults:
 dataset:
   source: xla
   search: random
+  max_configs: 160
 
 hydra:
   job:
