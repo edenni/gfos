@@ -28,9 +28,7 @@ class LayoutModel(torch.nn.Module):
         dropout: float = 0.0,
         activation: str = "LeakyReLU",
     ):
-        super().__init__()
-
-        conv_layer = getattr(geonn, conv_layer)
+        super(LayoutModel, self).__init__()
 
         merged_node_dim = 2 * node_dim + config_dim
 
@@ -42,7 +40,7 @@ class LayoutModel(torch.nn.Module):
 
         self.node_gnn = self._create_conv_module(
             conv_layer=node_layer,
-            node_layers=num_node_layers,
+            num_layers=num_node_layers,
             in_channels=in_channels,
             hidden_channels=node_dim,
             out_channels=node_dim,
@@ -107,7 +105,7 @@ class LayoutModel(torch.nn.Module):
         Returns:
             nn.Module: a sequential layer with convolution and activation
         """
-        assert activation in ["relu", "leaky_relu"], f"Invalid activation: {activation}"
+        assert activation in ["ReLU", "LeakyReLU"], f"Invalid activation: {activation}"
         assert conv_layer in [
             "GATConv",
             "GCNConv",

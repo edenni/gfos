@@ -6,7 +6,7 @@ node_config_dim: ???
 op_embedding_dim: 32
 
 node_layer: SAGEConv
-num_node_layer: 4
+num_node_layers: 4
 node_dim: 64
 
 config_neighbor_layer: GATConv
