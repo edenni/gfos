@@ -148,7 +148,6 @@ class LayoutPipeline(Pipeline):
         loss_mean = 0
         not_improved = 0
 
-        # scaler = GradScaler()
         for epoch in range(num_epochs):
             # Shuffle the training dataset
             permutation = np.random.permutation(len(self.train_dataset))
@@ -185,7 +184,6 @@ class LayoutPipeline(Pipeline):
                     config_edge_index.to(device),
                 )
 
-                # with autocast():
                 out = self.model(
                     node_feat,
                     node_opcode,
@@ -199,19 +197,16 @@ class LayoutPipeline(Pipeline):
                 loss = loss / accum_iter
                 loss_mean += loss.item()
                 loss.backward()
-                # scaler.scale(loss).backward()
-                if grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), grad_clip
-                    )
 
-                pbar.set_postfix_str(f"loss: {loss_mean:.4f}")
+                pbar.set_postfix_str(f"loss: {loss:.4f}")
 
                 if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
                     i + 1 == len(self.train_dataset)
                 ):
-                    # scaler.step(optimizer)
-                    # scaler.update()
+                    if grad_clip > 0:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), grad_clip
+                        )
                     self.optimizer.step()
                     self.optimizer.zero_grad()
 
