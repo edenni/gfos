@@ -18,7 +18,9 @@ class LayoutModel(torch.nn.Module):
         node_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_node_layers: int = 3,
         node_dim: int = 64,
-        config_neighbor_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
+        config_neighbor_layer: Literal[
+            "GATConv", "GCNConv", "SAGEConv"
+        ] = "SAGEConv",
         num_config_neighbor_layers: int = 3,
         config_neighbor_dim: int = 64,
         config_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
@@ -105,18 +107,27 @@ class LayoutModel(torch.nn.Module):
         Returns:
             nn.Module: a sequential layer with convolution and activation
         """
-        assert activation in ["ReLU", "LeakyReLU"], f"Invalid activation: {activation}"
+        assert activation in [
+            "ReLU",
+            "LeakyReLU",
+        ], f"Invalid activation: {activation}"
         assert conv_layer in [
             "GATConv",
             "GCNConv",
             "SAGEConv",
         ], f"Invalid conv layer: {conv_layer}"
-        assert num_layers > 1, f"num_layers must be greater than 1 but got {num_layers}"
+        assert (
+            num_layers > 1
+        ), f"num_layers must be greater than 1 but got {num_layers}"
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
 
-        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
+        channels = (
+            [in_channels]
+            + [hidden_channels] * (num_layers - 1)
+            + [out_channels]
+        )
 
         conv_layers = []
         if dropout > 0:
@@ -156,7 +167,9 @@ class LayoutModel(torch.nn.Module):
 
         # (N, node_dim) -> (NC, node_dim)
         config_neighbors = aggregate_neighbors(x, edge_index)[node_config_ids]
-        config_neighbors = self.config_neighbor_gnn(config_neighbors, config_edge_index)
+        config_neighbors = self.config_neighbor_gnn(
+            config_neighbors, config_edge_index
+        )
 
         # (N, node_dim) -> (NC, node_dim)
         x = x[node_config_ids]
@@ -175,7 +188,10 @@ class LayoutModel(torch.nn.Module):
         )
         x = nn.functional.normalize(x, dim=-1)
 
-        datas = [Data(x=x[i], edge_index=config_edge_index) for i in range(x.shape[0])]
+        datas = [
+            Data(x=x[i], edge_index=config_edge_index)
+            for i in range(x.shape[0])
+        ]
         batch = Batch.from_data_list(datas)
 
         # (C, NC, merged_node_dim) -> (C, NC, config_dim)
