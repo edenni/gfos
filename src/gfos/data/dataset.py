@@ -522,7 +522,6 @@ class LayoutDataset(Dataset):
         num_configs: int = -1,
         config_edges: Literal["simple", "full_connect"] = None,
         normalizer: Normalizer = None,
-        test: bool = False,  # TODO: remove
         bins: np.array = None,
     ):
         self.max_configs = max_configs
@@ -544,14 +543,13 @@ class LayoutDataset(Dataset):
 
             runtime = (runtime - runtime.mean()) / runtime.std()
 
-            # TODO: invest when sampling results in better kendall scores on validation set
-            # and scores after sampling are close LB scores
-            # Currently, use sampling for both training and validation
-            if not test:
+            if self.max_configs > 0:
+                # sample `max_configs` with order [good_configs, bad_configs, random_configs]
                 runtime_sampled, config_indices = sample_configs(
                     runtime, max_configs
                 )
             else:
+                # use all configs
                 runtime_sampled = runtime
                 config_indices = torch.arange(len(runtime))
 
@@ -559,10 +557,12 @@ class LayoutDataset(Dataset):
             record["node_config_feat"] = record["node_config_feat"][
                 config_indices
             ]
+            record["argsort_runtime"] = np.argsort(runtime_sampled)
 
             if bins is not None:
                 record["cls_label"] = cls_lables[config_indices]
 
+            # create graph for configurable nodes
             if self.config_edges:
                 config_edge_index = get_config_graph(
                     record["edge_index"],
@@ -577,6 +577,9 @@ class LayoutDataset(Dataset):
 
             record["config_runtime"] = torch.tensor(
                 record["config_runtime"], dtype=torch.float
+            )
+            record["argsort_runtime"] = torch.tensor(
+                record["argsort_runtime"], dtype=torch.long
             )
             record["node_feat"] = torch.tensor(
                 record["node_feat"], dtype=torch.float
@@ -616,28 +619,36 @@ class LayoutDataset(Dataset):
 
     def __getitem__(self, idx) -> dict[str, Any]:
         record = self.data[idx]
-        # config_runtime = torch.tensor(
-        #     record["config_runtime"], dtype=torch.float
-        # )
+
         config_runtime = record["config_runtime"]
         node_feat = record["node_feat"]
         node_opcode = record["node_opcode"]
         edge_index = record["edge_index"]
         node_config_feat = record["node_config_feat"]
         node_config_ids = record["node_config_ids"]
+        argsort_runtime = record["argsort_runtime"]
+
+        c = len(config_runtime)
 
         if self.num_configs > 0:
-            num_configs = self.num_configs
+            num_configs = min(self.num_configs, c)
         elif self.max_configs > 0:
-            num_configs = self.max_configs
+            num_configs = min(self.max_configs, c)
         else:
-            num_configs = config_runtime.size(0)
+            num_configs = c
 
-        # Shuffle
+        # Sample
         if self.max_configs > 0 or self.num_configs > 0:
-            config_indices = torch.randperm(config_runtime.size(0))[
-                :num_configs
-            ]
+            # config_indices = torch.randperm(config_runtime.size(0))[
+            #     :num_configs
+            # ]
+            idx = torch.topk(
+                # Sample wrt GumbulSoftmax([NumConfs, NumConfs-1, ..., 1])
+                (c - torch.arange(c)) / c
+                - torch.log(-torch.log(torch.rand(c))),
+                num_configs,
+            )[1]
+            config_indices = argsort_runtime[idx]
         else:
             config_indices = torch.arange(num_configs)
         config_runtime = config_runtime[config_indices]

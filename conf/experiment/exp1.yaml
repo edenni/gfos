@@ -5,29 +5,53 @@ defaults:
   - override /optimizer: adamw
   - override /scheduler: plateau
   - override /loss: multi_element_rank
-  # - override /logger: 
+  - override /logger: wandb
   - override /dataset: layout
   - override /trainer: layout
 
 dataset:
   source: xla
   search: random
-  max_configs: 160
+  max_configs: 10240
+  num_configs: 128
+
+model:
+  node_layer: SAGEConv
+  num_node_layers: 4
+  node_dim: 64
+
+  config_neighbor_layer: GATConv
+  num_config_neighbor_layers: 2
+  config_neighbor_dim: 64
+
+  config_layer: SAGEConv
+  num_config_layers: 4
+  config_dim: 64
+
+  head_dim: 64
+  dropout: 0.2
+  activation: LeakyReLU
 
 hydra:
   job:
     name: ${run_name}
 
-# logger:
-#   project: ${project}
-#   group: 
-#   name: ${run_name}
-#   tags: ["rnn", "cv"]
-#   job_type: ${task}
+logger:
+  project: ${project}
+  group: 
+  name: ${run_name}
+  tags:
+    - pipeline
+    - ${dataset.source}
+    - ${dataset.search}
 
 trainer:
-  max_epochs: 150
+  max_epochs: 2000
+  num_val_epochs: 40
+  infer_bs: 70
+  early_stopping: 10
 
-run_name: layout_debug
-pipeline: layout  # available pipelines defined in src/*/pipeline/
-task: train  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
+scheduler:
+  patience: 4
+
+tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

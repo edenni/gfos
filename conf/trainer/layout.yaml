@@ -1,5 +1,6 @@
 num_epochs: 1000
-accum_iter: 8
+accum_iter: 4
 grad_clip: 1e-1
 num_val_epochs: 50
 infer_bs: 100
+early_stopping: 10

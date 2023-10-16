@@ -62,42 +62,42 @@ def topk_error(preds: np.array, target: np.array, top_k: int = 5, index=False):
     return error / top_k
 
 
-class TopKError(Metric):
-    def __init__(self, top_k=5, dist_sync_on_step=False):
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
+# class TopKError(Metric):
+#     def __init__(self, top_k=5, dist_sync_on_step=False):
+#         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.top_k = top_k
-        self.add_state("error", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+#         self.top_k = top_k
+#         self.add_state("error", default=torch.tensor(0), dist_reduce_fx="sum")
+#         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
-        # Get the indices of the top k elements in target
-        target_top_k = target.topk(self.top_k, largest=True)[1]
-        preds_top_k = preds.topk(self.top_k, largest=True)[1]
+#     def update(self, preds: torch.Tensor, target: torch.Tensor):
+#         # Get the indices of the top k elements in target
+#         target_top_k = target.topk(self.top_k, largest=True)[1]
+#         preds_top_k = preds.topk(self.top_k, largest=True)[1]
 
-        # Calculate error
-        error = len(set(target_top_k.tolist()) - set(preds_top_k.tolist()))
+#         # Calculate error
+#         error = len(set(target_top_k.tolist()) - set(preds_top_k.tolist()))
 
-        self.error += error
-        self.total += self.top_k  # since we are comparing top_k elements
+#         self.error += error
+#         self.total += self.top_k  # since we are comparing top_k elements
 
-    def compute(self):
-        top_k_error = self.error.float() / self.total
-        return top_k_error
+#     def compute(self):
+#         top_k_error = self.error.float() / self.total
+#         return top_k_error
 
 
 class LayoutMetrics:
     def __init__(self) -> None:
         self.model_ids: list[str] = []
-        self.preds: list[torch.Tensor] = []
-        self.targets: list[torch.Tensor] = []
+        self.preds: list[np.array] = []
+        self.targets: list[np.array] = []
 
-    def add(
-        self, model_id: str, preds: torch.Tensor, targets: torch.Tensor
-    ) -> None:
+    def add(self, model_id: str, preds: np.array, targets: np.array) -> None:
         assert isinstance(model_id, str)
-        preds = preds.cpu()
-        targets = targets.cpu()
+        if isinstance(preds, torch.Tensor):
+            preds = preds.cpu().numpy()
+        if isinstance(targets, torch.Tensor):
+            targets = targets.cpu().numpy()
 
         self.model_ids.append(model_id)
         self.preds.append(preds)
@@ -114,10 +114,10 @@ class LayoutMetrics:
     def index_kendall(self) -> list[float]:
         kendalls = []
         for pred, target in zip(self.preds, self.targets):
-            sorted_target, sorted_index = torch.sort(target)
+            sorted_index = np.argsort(target)
             sorted_preds = pred[sorted_index]
             kendalls.append(
-                kendall(sorted_preds.argsort(), sorted_target.argsort())
+                kendall(sorted_preds.argsort(), np.arange(len(target)))
             )
         return kendalls
 
@@ -135,13 +135,17 @@ class LayoutMetrics:
             for pred, target in zip(self.preds, self.targets)
         ]
 
-    def compute_scores(self) -> dict[str, float]:
-        return {
-            "raw_kendall": np.mean(self.raw_kendall),
-            "index_kendall": np.mean(self.index_kendall),
-            "top100_error": np.mean(self.top100_error),
-            "top500_error": np.mean(self.top500_error),
-        } + {
-            f"kendall_{model}": score
-            for model, score in zip(self.model_ids, self.index_kendall)
+    def compute_scores(self, prefix: str = "") -> dict[str, float]:
+        scores = {
+            f"{prefix}raw_kendall": np.mean(self.raw_kendall),
+            f"{prefix}index_kendall": np.mean(self.index_kendall),
+            f"{prefix}top100_error": np.mean(self.top100_error),
+            f"{prefix}top500_error": np.mean(self.top500_error),
         }
+        scores.update(
+            {
+                f"{prefix}kendall_{model}": score
+                for model, score in zip(self.model_ids, self.index_kendall)
+            }
+        )
+        return scores

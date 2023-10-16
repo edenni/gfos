@@ -15,11 +15,13 @@ defaults:
   - experiment: null
 
 ignore_warnings: true
+print_configs: false
 
 tags: 
 
-pipeline: train
 seed: 42
-task: cv
+tasks: cv
 
-project: 
+project: gfos
+run_name: layout_${dataset.source}_${dataset.search}_${now:%Y%m%d_%H%M%S}
+pipeline: layout

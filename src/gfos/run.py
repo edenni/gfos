@@ -23,12 +23,14 @@ def main(cfg: DictConfig):
 
         warnings.filterwarnings("ignore")
 
-    print_config_tree(cfg, save_to_file=False)
+    if cfg.print_configs:
+        print_config_tree(cfg, save_to_file=False)
 
-    pl.seed_everything(cfg.get("seed", 42))
+    seed = cfg.get("seed", 42)
+    pl.seed_everything(seed)
 
     pipeline = pipelines[cfg.pipeline]
-    logger.info(f"Running pipeline {pipeline}.")
+    logger.info(f"Running pipeline <{pipeline.pipeline_name}>")
     pipeline(cfg).run()
 
 

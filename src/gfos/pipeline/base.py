@@ -24,11 +24,15 @@ class Pipeline:
         ...
 
     def run(self):
-        self.create_dataset()
+        tasks = self.cfg.tasks
 
-        task = getattr(self, self.cfg.task)
-        if task is None:
-            raise NotImplementedError(f"Task {self.cfg.task} not found.")
+        if isinstance(tasks, str):
+            tasks = [tasks]
 
-        logger.info(f"Running task {self.cfg.task}")
-        task()
+        for task in tasks:
+            task_fn = getattr(self, task)
+            if task is None:
+                raise NotImplementedError(f"Task task not found.")
+
+            logger.info(f"Running task <{task}>")
+            task_fn()
