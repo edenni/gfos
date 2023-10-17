@@ -259,7 +259,7 @@ class LayoutPipeline(Pipeline):
             # Update best scores and save the model
             if kendall > best_score:
                 best_score = kendall
-                print(f"Best score updated: {best_score:.4f}")
+                print(f"Best score updated at epoch {epoch}: {best_score:.4f}")
                 if use_logger:
                     self.best_model_path = self._save_model(epoch, kendall)
                 not_improved = 0
