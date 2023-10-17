@@ -262,13 +262,17 @@ class LayoutPipeline(Pipeline):
                 print(f"Best score updated: {best_score:.4f}")
                 if use_logger:
                     self.best_model_path = self._save_model(epoch, kendall)
-                if early_stopping > 0 and not_improved == early_stopping:
-                    break
+                not_improved = 0
             else:
                 not_improved += 1
+                if early_stopping > 0 and not_improved == early_stopping:
+                    break
 
         if use_logger:
             self._save_model(epoch, kendall, suffix="_last")
+
+        if "test" not in self.cfg.tasks:
+            wandb.finish()
 
     def _save_model(self, epoch: int, score: float, suffix: str = "") -> str:
         filename = f"{epoch}_{score:.4f}{suffix}.pth"
@@ -370,3 +374,5 @@ class LayoutPipeline(Pipeline):
                 model_id = f"layout:{source}:{search}:" + k
                 values = ";".join([str(i) for i in v])
                 f.write(f"{model_id},{values}\n")
+
+        wandb.finish()
