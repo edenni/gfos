@@ -12,7 +12,7 @@ defaults:
 dataset:
   source: xla
   search: random
-  max_configs: 4800
+  max_configs: 3000
   num_configs: 64
 
 model:
