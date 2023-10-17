@@ -27,11 +27,13 @@ def get_config_graph(
             trimmed_edges.append([src, tgt])
 
     trimmed_edges = np.array(trimmed_edges)
-    weights = [distances[src][tgt] for src, tgt in trimmed_edges]
-    weights = np.array(weights)
-    weights = weights.max() / weights
 
-    return trimmed_edges, weights if return_distance else trimmed_edges
+    if return_distance:
+        weights = [distances[src][tgt] for src, tgt in trimmed_edges]
+        weights = np.array(weights)
+        weights = weights.max() / weights
+
+    return (trimmed_edges, weights) if return_distance else trimmed_edges
 
 
 class Graph:
