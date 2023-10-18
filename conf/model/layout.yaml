@@ -16,6 +16,7 @@ config_neighbor_dim: 64
 config_layer: SAGEConv
 num_config_layers: 4
 config_dim: 64
+use_config_edge_weight: false
 
 head_dim: 64
 dropout: 0.1

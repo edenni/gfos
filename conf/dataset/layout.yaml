@@ -4,5 +4,6 @@ source: ???
 search: ???
 max_configs: 6400
 num_configs: 128
-config_edges: simple
+config_edges: true
 normalizer_path: ${paths.root_dir}/data/normalizer.json
+config_edge_weight: false

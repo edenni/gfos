@@ -246,21 +246,26 @@ class LayoutDataset(Dataset):
         files: list[str],
         max_configs: int = -1,
         num_configs: int = -1,
-        config_edges: Literal["simple", "full_connect"] = None,
+        config_edges: bool = True,
         normalizer: Normalizer = None,
         bins: np.array = None,
+        config_edge_weight: bool = False,
     ):
+        if config_edge_weight:
+            assert config_edges, "return_distance requires config_edges"
+
         self.max_configs = max_configs
         self.num_configs = num_configs
         self.files = files
-        self.config_edges = config_edges
         self.normalizer = normalizer
 
         self.data = []
-
-        for file in tqdm(self.files, desc="Loading data"):
+        pbar = tqdm(self.files, desc="Loading data")
+        for file in pbar:
             record = dict(np.load(file))
             model_id = Path(file).stem
+            pbar.set_postfix_str(model_id)
+
             record["model_id"] = model_id
             runtime = record["config_runtime"]
 
@@ -289,13 +294,19 @@ class LayoutDataset(Dataset):
                 record["cls_label"] = cls_lables[config_indices]
 
             # create graph for configurable nodes
-            if self.config_edges:
-                # TODO: add node distance as edge weight
+            if config_edges:
                 config_edge_index = get_config_graph(
                     record["edge_index"],
                     record["node_config_ids"],
-                    full_connection=self.config_edges == "full_connect",
+                    return_distance=config_edge_weight,
                 )
+                if config_edge_weight:
+                    config_edge_index, edge_weights = config_edge_index
+                    edge_weights = torch.tensor(
+                        np.swapaxes(edge_weights, 0, 1), dtype=torch.long
+                    )
+                    record["config_edge_weights"] = edge_weights
+
                 config_edge_index = torch.tensor(
                     np.swapaxes(config_edge_index, 0, 1),
                     dtype=torch.long,
@@ -394,8 +405,11 @@ class LayoutDataset(Dataset):
             config_runtime=config_runtime,
         )
 
-        if self.config_edges:
+        if "config_edge_index" in record:
             sample["config_edge_index"] = record["config_edge_index"]
+
+        if "config_edge_weights" in record:
+            sample["config_edge_weights"] = record["config_edge_weights"]
 
         if "cls_label" in record:
             sample["cls_label"] = record["cls_label"][config_indices]

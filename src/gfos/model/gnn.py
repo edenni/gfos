@@ -19,13 +19,16 @@ class LayoutModel(torch.nn.Module):
         num_node_layers: int = 3,
         node_dim: int = 64,
         node_conv_kwargs: dict = {},
-        config_neighbor_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
+        config_neighbor_layer: Literal[
+            "GATConv", "GCNConv", "SAGEConv"
+        ] = "SAGEConv",
         num_config_neighbor_layers: int = 3,
         config_neighbor_dim: int = 64,
         config_neighbor_conv_kwargs: dict = {},
         config_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_config_layers: int = 3,
         config_dim: int = 64,
+        use_config_edge_weight: bool = False,
         config_conv_kwargs: dict = {},
         head_dim: int = 64,
         dropout: float = 0.0,
@@ -70,6 +73,7 @@ class LayoutModel(torch.nn.Module):
             activation=activation,
             dropout=dropout,
             config_conv_kwargs=config_conv_kwargs,
+            use_edge_weight=use_config_edge_weight,
         )
 
         self.config_prj = nn.Sequential(
@@ -95,6 +99,7 @@ class LayoutModel(torch.nn.Module):
         out_channels: int,
         activation: str,
         dropout: float = 0.0,
+        use_edge_weight: bool = False,
         **conv_kwargs: dict,
     ) -> nn.Module:
         """
@@ -120,12 +125,20 @@ class LayoutModel(torch.nn.Module):
             "GCNConv",
             "SAGEConv",
         ], f"Invalid conv layer: {conv_layer}"
-        assert num_layers > 1, f"num_layers must be greater than 1 but got {num_layers}"
+        assert (
+            num_layers > 1
+        ), f"num_layers must be greater than 1 but got {num_layers}"
+        if conv_layer == "SAGEConv" and use_edge_weight:
+            raise ValueError("SAGEConv does not support edge weights")
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
 
-        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
+        channels = (
+            [in_channels]
+            + [hidden_channels] * (num_layers - 1)
+            + [out_channels]
+        )
 
         conv_layers = []
         if dropout > 0:
@@ -136,14 +149,18 @@ class LayoutModel(torch.nn.Module):
                 [
                     (
                         conv_layer(in_plane, out_plane, **conv_kwargs),
-                        "x, edge_index -> x",
+                        "x, edge_index, edge_weight -> x"
+                        if use_edge_weight
+                        else "x, edge_index -> x",
                     ),
                     activation(inplace=True),
                 ]
             )
 
         return geonn.Sequential(
-            "x, edge_index",
+            "x, edge_index, edge_weight"
+            if use_edge_weight
+            else "x, edge_index",
             conv_layers,
         )
 
@@ -154,7 +171,8 @@ class LayoutModel(torch.nn.Module):
         edge_index: torch.Tensor,
         node_config_feat: torch.Tensor,
         node_config_ids: torch.Tensor,
-        config_edge_index: torch.Tensor,
+        config_edge_index: torch.Tensor = None,
+        config_edge_weight: torch.Tensor = None,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
 
@@ -165,7 +183,9 @@ class LayoutModel(torch.nn.Module):
 
         # (N, node_dim) -> (NC, node_dim)
         config_neighbors = aggregate_neighbors(x, edge_index)[node_config_ids]
-        config_neighbors = self.config_neighbor_gnn(config_neighbors, config_edge_index)
+        config_neighbors = self.config_neighbor_gnn(
+            config_neighbors, config_edge_index
+        )
 
         # (N, node_dim) -> (NC, node_dim)
         x = x[node_config_ids]
@@ -184,11 +204,18 @@ class LayoutModel(torch.nn.Module):
         )
         x = nn.functional.normalize(x, dim=-1)
 
-        datas = [Data(x=x[i], edge_index=config_edge_index) for i in range(x.shape[0])]
+        datas = [
+            Data(
+                x=x[i],
+                edge_index=config_edge_index,
+                edge_weight=config_edge_weight,
+            )
+            for i in range(x.shape[0])
+        ]
         batch = Batch.from_data_list(datas)
 
         # (C, NC, merged_node_dim) -> (C, NC, config_dim)
-        x = self.config_gnn(batch.x, batch.edge_index)
+        x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
 
         # (C, NC, config_dim) -> (C, config_dim)
         x = geonn.pool.global_mean_pool(x, batch.batch)

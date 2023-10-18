@@ -12,24 +12,25 @@ defaults:
 dataset:
   source: xla
   search: random
-  max_configs: 3000
-  num_configs: 64
+  max_configs: 10240
+  num_configs: 128
 
 model:
   node_layer: SAGEConv
-  num_node_layers: 3
+  num_node_layers: 4
   node_dim: 64
-  node_conv_kwargs:
-    aggr: max
-    normalize: True
+  # node_conv_kwargs:
+  #   aggr: max
+  #   normalize: True
 
   config_neighbor_layer: GATConv
   num_config_neighbor_layers: 2
   config_neighbor_dim: 64
 
-  config_layer: SAGEConv
+  config_layer: GCNConv
   num_config_layers: 4
   config_dim: 64
+  use_config_edge_weight: true
 
   head_dim: 64
   dropout: 0.2
