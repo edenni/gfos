@@ -46,9 +46,9 @@ logger:
     - ${dataset.search}
 
 trainer:
-  max_epochs: 2000
+  num_epochs: 2000
   num_val_epochs: 40
-  infer_bs: 70
+  infer_bs: 100
   early_stopping: 10
 
 scheduler:
