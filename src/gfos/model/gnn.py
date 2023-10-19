@@ -42,7 +42,7 @@ class LayoutModel(torch.nn.Module):
         if not self.use_weight:
             logger.warning("Disable config edge weight")
 
-        merged_node_dim = 2 * node_dim + config_dim
+        merged_node_dim = node_dim + config_neighbor_dim + config_dim
 
         self.embedding = torch.nn.Embedding(
             num_opcodes,
