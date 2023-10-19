@@ -27,12 +27,12 @@ model:
   num_config_neighbor_layers: 2
   config_neighbor_dim: 64
 
-  config_layer: GraphConv
+  config_layer: SAGEConv
   num_config_layers: 4
   config_dim: 64
-  use_config_edge_weight: true
-  config_conv_kwargs:
-    aggr: mean
+  use_config_edge_weight: false
+  # config_conv_kwargs:
+  #   aggr: mean
 
   head_dim: 64
   dropout: 0.2
@@ -53,7 +53,7 @@ logger:
     - ablation
 
 trainer:
-  num_epochs: 1000
+  num_epochs: 2000
   num_val_epochs: 40
   infer_bs: 80
   early_stopping: 10

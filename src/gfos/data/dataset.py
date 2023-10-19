@@ -256,6 +256,16 @@ class LayoutDataset(Dataset):
 
         self.data = []
         pbar = tqdm(self.files, desc="Loading data")
+
+        # Load all runtime and calculate mean and std
+        all_runtime = []
+        for file in self.files:
+            record = dict(np.load(file))
+            all_runtime.append(record["config_runtime"])
+        all_runtime = np.concatenate(all_runtime)
+        mu = all_runtime.mean()
+        std = all_runtime.std()
+
         for file in pbar:
             record = dict(np.load(file))
             model_id = Path(file).stem
@@ -267,7 +277,7 @@ class LayoutDataset(Dataset):
             if bins is not None:
                 cls_lables = np.digitize(runtime, bins)
 
-            runtime = (runtime - runtime.mean()) / runtime.std()
+            runtime = (runtime - mu) / std
 
             if self.max_configs > 0:
                 # sample `max_configs` with order [good_configs, bad_configs, random_configs]
