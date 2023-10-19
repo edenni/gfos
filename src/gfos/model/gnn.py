@@ -1,3 +1,4 @@
+import logging
 from typing import Literal
 
 import torch
@@ -6,6 +7,8 @@ import torch_geometric.nn as geonn
 from torch_geometric.data import Batch, Data
 
 from .utils import aggregate_neighbors
+
+logger = logging.getLogger(__name__)
 
 
 class LayoutModel(torch.nn.Module):
@@ -35,6 +38,9 @@ class LayoutModel(torch.nn.Module):
         activation: str = "LeakyReLU",
     ):
         super(LayoutModel, self).__init__()
+        self.use_weight = use_config_edge_weight
+        if not self.use_weight:
+            logger.warning("Disable config edge weight")
 
         merged_node_dim = 2 * node_dim + config_dim
 
@@ -51,7 +57,8 @@ class LayoutModel(torch.nn.Module):
             hidden_channels=node_dim,
             out_channels=node_dim,
             activation=activation,
-            node_conv_kwargs=node_conv_kwargs,
+            use_edge_weight=False,
+            **node_conv_kwargs,
         )
 
         self.config_neighbor_gnn = self._create_conv_module(
@@ -61,7 +68,8 @@ class LayoutModel(torch.nn.Module):
             hidden_channels=config_neighbor_dim,
             out_channels=config_neighbor_dim,
             activation=activation,
-            config_neighbor_conv_kwargs=config_neighbor_conv_kwargs,
+            use_edge_weight=False,
+            **config_neighbor_conv_kwargs,
         )
 
         self.config_gnn = self._create_conv_module(
@@ -72,9 +80,18 @@ class LayoutModel(torch.nn.Module):
             out_channels=config_dim,
             activation=activation,
             dropout=dropout,
-            config_conv_kwargs=config_conv_kwargs,
-            use_edge_weight=use_config_edge_weight,
+            use_edge_weight=self.use_weight,
+            **config_conv_kwargs,
         )
+
+        # self.config_gnn = geonn.models.GraphSAGE(
+        #     in_channels=merged_node_dim,
+        #     hidden_channels=config_dim,
+        #     out_channels=config_dim,
+        #     num_layers=num_config_layers,
+        #     dropout=dropout,
+        #     act="leaky_relu",
+        # )
 
         self.config_prj = nn.Sequential(
             nn.Linear(node_config_dim, config_dim),
@@ -116,20 +133,11 @@ class LayoutModel(torch.nn.Module):
         Returns:
             nn.Module: a sequential layer with convolution and activation
         """
-        assert activation in [
-            "ReLU",
-            "LeakyReLU",
-        ], f"Invalid activation: {activation}"
-        assert conv_layer in [
-            "GATConv",
-            "GCNConv",
-            "SAGEConv",
-        ], f"Invalid conv layer: {conv_layer}"
         assert (
             num_layers > 1
         ), f"num_layers must be greater than 1 but got {num_layers}"
-        if conv_layer == "SAGEConv" and use_edge_weight:
-            raise ValueError("SAGEConv does not support edge weights")
+        # if conv_layer == "SAGEConv" and use_edge_weight:
+        #     raise ValueError("SAGEConv does not support edge weights")
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
@@ -139,6 +147,9 @@ class LayoutModel(torch.nn.Module):
             + [hidden_channels] * (num_layers - 1)
             + [out_channels]
         )
+
+        if conv_kwargs:
+            logger.info(f"Set kwargs: {conv_kwargs} for {conv_layer}")
 
         conv_layers = []
         if dropout > 0:
@@ -215,7 +226,10 @@ class LayoutModel(torch.nn.Module):
         batch = Batch.from_data_list(datas)
 
         # (C, NC, merged_node_dim) -> (C, NC, config_dim)
-        x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
+        if self.use_weight:
+            x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
+        else:
+            x = self.config_gnn(batch.x, batch.edge_index)
 
         # (C, NC, config_dim) -> (C, config_dim)
         x = geonn.pool.global_mean_pool(x, batch.batch)

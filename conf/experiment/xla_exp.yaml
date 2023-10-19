@@ -13,7 +13,7 @@ dataset:
   source: xla
   search: random
   max_configs: 10240
-  num_configs: 128
+  num_configs: 64
 
 model:
   node_layer: SAGEConv
@@ -27,10 +27,12 @@ model:
   num_config_neighbor_layers: 2
   config_neighbor_dim: 64
 
-  config_layer: GCNConv
+  config_layer: GraphConv
   num_config_layers: 4
   config_dim: 64
   use_config_edge_weight: true
+  config_conv_kwargs:
+    aggr: mean
 
   head_dim: 64
   dropout: 0.2
@@ -53,7 +55,7 @@ logger:
 trainer:
   num_epochs: 1000
   num_val_epochs: 40
-  infer_bs: 70
+  infer_bs: 80
   early_stopping: 10
 
 scheduler:

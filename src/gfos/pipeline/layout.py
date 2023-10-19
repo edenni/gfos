@@ -26,9 +26,7 @@ class LayoutPipeline(Pipeline):
         search = self.cfg.dataset.search
         max_configs = self.cfg.dataset.max_configs
         num_configs = self.cfg.dataset.num_configs
-        config_edges = self.cfg.dataset.config_edges
         normalizer_path = self.cfg.dataset.normalizer_path
-        config_edge_weight = self.cfg.dataset.config_edge_weight
 
         # Validate configs
         assert source in ("xla", "nlp"), f"Unknown source {source}"
@@ -63,23 +61,17 @@ class LayoutPipeline(Pipeline):
                 files=layout_files["train"],
                 max_configs=max_configs,
                 num_configs=num_configs,
-                config_edges=config_edges,
                 normalizer=normalizer,
-                config_edge_weight=config_edge_weight,
             )
 
             self.valid_dataset = LayoutDataset(
                 files=layout_files["valid"],
-                config_edges=config_edges,
                 normalizer=normalizer,
-                config_edge_weight=config_edge_weight,
             )
         if test:
             self.test_dataset = LayoutDataset(
                 files=layout_files["test"],
-                config_edges=config_edges,
                 normalizer=normalizer,
-                config_edge_weight=config_edge_weight,
             )
 
     @property
@@ -165,6 +157,7 @@ class LayoutPipeline(Pipeline):
                 node_config_ids = record["node_config_ids"]
                 config_runtime = record["config_runtime"]
                 config_edge_index = record["config_edge_index"]
+                config_edge_weight = record["config_edge_weight"]
 
                 (
                     node_feat,
@@ -174,6 +167,7 @@ class LayoutPipeline(Pipeline):
                     node_config_ids,
                     config_runtime,
                     config_edge_index,
+                    config_edge_weight,
                 ) = (
                     node_feat.to(device),
                     node_opcode.to(device),
@@ -182,6 +176,7 @@ class LayoutPipeline(Pipeline):
                     node_config_ids.to(device),
                     config_runtime.to(device),
                     config_edge_index.to(device),
+                    config_edge_weight.to(device),
                 )
 
                 out = self.model(
@@ -191,6 +186,7 @@ class LayoutPipeline(Pipeline):
                     node_config_feat,
                     node_config_ids,
                     config_edge_index,
+                    config_edge_weight,
                 )
 
                 loss = self.criterion(out, config_runtime)
@@ -302,9 +298,8 @@ class LayoutPipeline(Pipeline):
             node_config_feat = record["node_config_feat"]
             node_config_ids = record["node_config_ids"]
             config_runtime = record["config_runtime"]
-
-            config_edge_index = record.get("config_edge_index", None)
-            config_edge_weight = record.get("config_edge_weight", None)
+            config_edge_index = record["config_edge_index"]
+            config_edge_weight = record["config_edge_weight"]
 
             (
                 node_feat,
@@ -312,17 +307,17 @@ class LayoutPipeline(Pipeline):
                 edge_index,
                 node_config_feat,
                 node_config_ids,
+                config_edge_index,
+                config_edge_weight,
             ) = (
                 node_feat.to(device),
                 node_opcode.to(device),
                 edge_index.to(device),
                 node_config_feat.to(device),
                 node_config_ids.to(device),
+                config_edge_index.to(device),
+                config_edge_weight.to(device),
             )
-            if config_edge_index is not None:
-                config_edge_index = config_edge_index.to(device)
-            if config_edge_weight is not None:
-                config_edge_weight = config_edge_weight.to(device)
 
             c = len(config_runtime)
             outs = []

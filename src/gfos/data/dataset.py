@@ -246,14 +246,9 @@ class LayoutDataset(Dataset):
         files: list[str],
         max_configs: int = -1,
         num_configs: int = -1,
-        config_edges: bool = True,
         normalizer: Normalizer = None,
         bins: np.array = None,
-        config_edge_weight: bool = False,
     ):
-        if config_edge_weight:
-            assert config_edges, "return_distance requires config_edges"
-
         self.max_configs = max_configs
         self.num_configs = num_configs
         self.files = files
@@ -294,24 +289,20 @@ class LayoutDataset(Dataset):
                 record["cls_label"] = cls_lables[config_indices]
 
             # create graph for configurable nodes
-            if config_edges:
-                config_edge_index = get_config_graph(
-                    record["edge_index"],
-                    record["node_config_ids"],
-                    return_distance=config_edge_weight,
-                )
-                if config_edge_weight:
-                    config_edge_index, edge_weights = config_edge_index
-                    edge_weights = torch.tensor(
-                        np.swapaxes(edge_weights, 0, 1), dtype=torch.long
-                    )
-                    record["config_edge_weights"] = edge_weights
 
-                config_edge_index = torch.tensor(
-                    np.swapaxes(config_edge_index, 0, 1),
-                    dtype=torch.long,
-                )
-                record["config_edge_index"] = config_edge_index
+            config_edge_index, edge_weight = get_config_graph(
+                record["edge_index"],
+                record["node_config_ids"],
+            )
+            record["config_edge_weight"] = torch.tensor(
+                edge_weight, dtype=torch.float
+            )
+
+            config_edge_index = torch.tensor(
+                np.swapaxes(config_edge_index, 0, 1),
+                dtype=torch.long,
+            )
+            record["config_edge_index"] = config_edge_index
 
             record["config_runtime"] = torch.tensor(
                 record["config_runtime"], dtype=torch.float
@@ -365,6 +356,8 @@ class LayoutDataset(Dataset):
         node_config_feat = record["node_config_feat"]
         node_config_ids = record["node_config_ids"]
         argsort_runtime = record["argsort_runtime"]
+        config_edge_index = record["config_edge_index"]
+        config_edge_weight = record["config_edge_weight"]
 
         c = len(config_runtime)
 
@@ -403,13 +396,9 @@ class LayoutDataset(Dataset):
             node_config_feat=node_config_feat,
             node_config_ids=node_config_ids,
             config_runtime=config_runtime,
+            config_edge_index=config_edge_index,
+            config_edge_weight=config_edge_weight,
         )
-
-        if "config_edge_index" in record:
-            sample["config_edge_index"] = record["config_edge_index"]
-
-        if "config_edge_weights" in record:
-            sample["config_edge_weights"] = record["config_edge_weights"]
 
         if "cls_label" in record:
             sample["cls_label"] = record["cls_label"][config_indices]
