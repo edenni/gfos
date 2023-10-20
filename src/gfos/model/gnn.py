@@ -225,7 +225,7 @@ class LayoutModel(torch.nn.Module):
         config_edge_weight: torch.Tensor = None,
         # config_edge_mask: torch.Tensor = None,
         # config_edge_path_len: torch.Tensor = None,
-        config_edge_path: list[list[int]] = None,
+        # config_edge_path: list[list[int]] = None,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
 
