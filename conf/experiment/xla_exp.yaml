@@ -13,28 +13,24 @@ dataset:
   source: xla
   search: random
   max_configs: 10240
-  num_configs: 64
+  num_configs: 128
 
 model:
   node_layer: SAGEConv
   num_node_layers: 4
-  node_dim: 64
-  # node_conv_kwargs:
-  #   aggr: max
-  #   normalize: True
+  node_dim: 32
 
   config_neighbor_layer: GATConv
   num_config_neighbor_layers: 2
-  config_neighbor_dim: 64
+  config_neighbor_dim: 32
 
   config_layer: SAGEConv
   num_config_layers: 4
-  config_dim: 64
+  config_dim: 32
   use_config_edge_weight: false
-  # config_conv_kwargs:
-  #   aggr: mean
+  use_config_edge_attr: false
 
-  head_dim: 64
+  head_dim: 32
   dropout: 0.2
   activation: LeakyReLU
 
@@ -55,10 +51,13 @@ logger:
 trainer:
   num_epochs: 2000
   num_val_epochs: 40
-  infer_bs: 80
+  infer_bs: 100
   early_stopping: 10
 
 scheduler:
   patience: 4
+
+optimizer:
+  lr: 5e-3
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

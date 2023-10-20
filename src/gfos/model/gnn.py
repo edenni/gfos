@@ -19,19 +19,23 @@ class LayoutModel(torch.nn.Module):
         node_config_dim: int = 18,
         op_embedding_dim: int = 32,
         node_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
-        num_node_layers: int = 3,
+        num_node_layers: int = 4,
         node_dim: int = 64,
         node_conv_kwargs: dict = {},
         config_neighbor_layer: Literal[
             "GATConv", "GCNConv", "SAGEConv"
         ] = "SAGEConv",
-        num_config_neighbor_layers: int = 3,
+        num_config_neighbor_layers: int = 2,
         config_neighbor_dim: int = 64,
         config_neighbor_conv_kwargs: dict = {},
         config_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
-        num_config_layers: int = 3,
+        num_config_layers: int = 4,
         config_dim: int = 64,
         use_config_edge_weight: bool = False,
+        use_config_edge_attr: bool = False,
+        edge_dim: int = 32,
+        jk_mode: Literal["cat", "max", "lstm"] = None,
+        jk_kwargs: dict = {},
         config_conv_kwargs: dict = {},
         head_dim: int = 64,
         dropout: float = 0.0,
@@ -39,6 +43,8 @@ class LayoutModel(torch.nn.Module):
     ):
         super(LayoutModel, self).__init__()
         self.use_weight = use_config_edge_weight
+        self.use_attr = use_config_edge_attr
+
         if not self.use_weight:
             logger.warning("Disable config edge weight")
 
@@ -58,8 +64,16 @@ class LayoutModel(torch.nn.Module):
             out_channels=node_dim,
             activation=activation,
             use_edge_weight=False,
+            jk_mode=jk_mode,
+            jk_kwargs=jk_kwargs,
             **node_conv_kwargs,
         )
+
+        if use_config_edge_attr:
+            self.node2edge = nn.Sequential(
+                nn.Linear(node_dim, edge_dim),
+                nn.LeakyReLU(),
+            )
 
         self.config_neighbor_gnn = self._create_conv_module(
             conv_layer=config_neighbor_layer,
@@ -80,18 +94,9 @@ class LayoutModel(torch.nn.Module):
             out_channels=config_dim,
             activation=activation,
             dropout=dropout,
-            use_edge_weight=self.use_weight,
+            use_edge_weight=self.use_weight or self.use_attr,
             **config_conv_kwargs,
         )
-
-        # self.config_gnn = geonn.models.GraphSAGE(
-        #     in_channels=merged_node_dim,
-        #     hidden_channels=config_dim,
-        #     out_channels=config_dim,
-        #     num_layers=num_config_layers,
-        #     dropout=dropout,
-        #     act="leaky_relu",
-        # )
 
         self.config_prj = nn.Sequential(
             nn.Linear(node_config_dim, config_dim),
@@ -117,6 +122,8 @@ class LayoutModel(torch.nn.Module):
         activation: str,
         dropout: float = 0.0,
         use_edge_weight: bool = False,
+        jk_mode: str = None,
+        jk_kwargs: dict = {},
         **conv_kwargs: dict,
     ) -> nn.Module:
         """
@@ -153,27 +160,59 @@ class LayoutModel(torch.nn.Module):
 
         conv_layers = []
         if dropout > 0:
-            conv_layers.append((nn.Dropout(p=dropout), "x -> x"))
+            conv_layers.append((nn.Dropout(p=dropout), "x0 -> x0"))
 
-        for in_plane, out_plane in zip(channels[:-1], channels[1:]):
+        for i, (in_plane, out_plane) in enumerate(
+            zip(channels[:-1], channels[1:])
+        ):
             conv_layers.extend(
                 [
                     (
                         conv_layer(in_plane, out_plane, **conv_kwargs),
-                        "x, edge_index, edge_weight -> x"
+                        f"x{i}, edge_index, edge_weight -> x{i+1}"
                         if use_edge_weight
-                        else "x, edge_index -> x",
+                        else f"x{i}, edge_index -> x{i+1}",
                     ),
                     activation(inplace=True),
                 ]
             )
 
+        xs = ",".join([f"x{i+1}" for i in range(num_layers)])
+
+        if jk_mode is not None:
+            conv_layers.extend(
+                [
+                    (lambda *xs: list(xs), f"{xs} -> xs"),
+                    (
+                        geonn.models.JumpingKnowledge(jk_mode, **jk_kwargs),
+                        "xs -> x",
+                    ),
+                ]
+            )
+
         return geonn.Sequential(
-            "x, edge_index, edge_weight"
+            "x0, edge_index, edge_weight"
             if use_edge_weight
-            else "x, edge_index",
+            else "x0, edge_index",
             conv_layers,
         )
+
+    @torch.jit.script
+    def reduce_node_to_edge(x, config_paths):
+        # Pre-allocate memory for the result
+        means = torch.empty(
+            len(config_paths), x.size(1), dtype=x.dtype, device=x.device
+        )
+
+        # Loop over config_paths
+        for i, path in enumerate(config_paths):
+            # Convert each path to a tensor
+            path_tensor = torch.tensor(path, dtype=torch.long, device=x.device)
+
+            # Index into x and compute the mean
+            means[i] = x[path_tensor].mean(dim=0)
+
+        return means
 
     def forward(
         self,
@@ -184,6 +223,9 @@ class LayoutModel(torch.nn.Module):
         node_config_ids: torch.Tensor,
         config_edge_index: torch.Tensor = None,
         config_edge_weight: torch.Tensor = None,
+        # config_edge_mask: torch.Tensor = None,
+        # config_edge_path_len: torch.Tensor = None,
+        config_edge_path: list[list[int]] = None,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
 
@@ -191,6 +233,20 @@ class LayoutModel(torch.nn.Module):
 
         # (N, in_channels) -> (N, node_dim)
         x = self.node_gnn(x, edge_index)
+
+        # # if self.use_attr:
+        #     # config_edge_attr = torch.stack(
+        #     #     [x[path].mean(dim=0) for path in config_edge_path]
+        #     # )
+        #     # config_edge_attr = self.reduce_node_to_edge(x, config_paths)
+        #     # config_edge_attr = (
+        #     #     x.expand_as(config_edge_mask) * config_edge_mask
+        #     # ).sum(dim=1) / config_edge_path_len
+        #     config_edge_attr = self.node2edge(
+        #         config_edge_attr
+        #     )  # (NC, edge_dim)
+        # else:
+        #     config_edge_attr = None
 
         # (N, node_dim) -> (NC, node_dim)
         config_neighbors = aggregate_neighbors(x, edge_index)[node_config_ids]
@@ -219,17 +275,20 @@ class LayoutModel(torch.nn.Module):
             Data(
                 x=x[i],
                 edge_index=config_edge_index,
-                edge_weight=config_edge_weight,
+                # edge_weight=config_edge_weight,
+                # edge_attr=config_edge_attr,
             )
             for i in range(x.shape[0])
         ]
         batch = Batch.from_data_list(datas)
 
-        # (C, NC, merged_node_dim) -> (C, NC, config_dim)
-        if self.use_weight:
-            x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
-        else:
-            x = self.config_gnn(batch.x, batch.edge_index)
+        # # (C, NC, merged_node_dim) -> (C, NC, config_dim)
+        # if self.use_attr:
+        #     x = self.config_gnn(batch.x, batch.edge_index, batch.edge_attr)
+        # elif self.use_weight:
+        # x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
+        # else:
+        x = self.config_gnn(batch.x, batch.edge_index)
 
         # (C, NC, config_dim) -> (C, config_dim)
         x = geonn.pool.global_mean_pool(x, batch.batch)

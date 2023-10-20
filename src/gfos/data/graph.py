@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict, deque
+from copy import deepcopy
 
 import numpy as np
 
@@ -31,6 +32,16 @@ def get_config_graph(
     edge_weights = np.where(edge_weights == 0, 1, edge_weights)
     edge_weights = np.max(edge_weights) / edge_weights
 
+    # map node ids to index in paths
+    mapped_paths = []
+    for src, tgt in config_node_index:
+        # path still use original node ids
+        # which will be used as index in node_feat
+        path = paths[src][tgt]
+        if len(path) == 0:
+            path = [src, tgt]
+        mapped_paths.append(path)
+
     # map node ids to index
     edge_mapping = {node: i for i, node in enumerate(config_node_ids)}
     config_node_index = [
@@ -39,7 +50,7 @@ def get_config_graph(
     ]
     config_node_index = np.array(config_node_index)
 
-    return config_node_index, edge_weights  # , paths
+    return config_node_index, edge_weights, mapped_paths
 
 
 class Graph:

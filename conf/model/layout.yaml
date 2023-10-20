@@ -17,6 +17,9 @@ config_layer: SAGEConv
 num_config_layers: 4
 config_dim: 64
 use_config_edge_weight: false
+use_config_edge_attr: false
+edge_dim: 
+jk_mode: 
 
 head_dim: 64
 dropout: 0.1

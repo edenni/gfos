@@ -158,6 +158,9 @@ class LayoutPipeline(Pipeline):
                 config_runtime = record["config_runtime"]
                 config_edge_index = record["config_edge_index"]
                 config_edge_weight = record["config_edge_weight"]
+                # config_edge_mask = record["config_edge_mask"]
+                # config_edge_path_len = record["config_edge_path_len"]
+                # config_edge_path = record["config_edge_path"]
 
                 (
                     node_feat,
@@ -165,18 +168,22 @@ class LayoutPipeline(Pipeline):
                     edge_index,
                     node_config_feat,
                     node_config_ids,
-                    config_runtime,
                     config_edge_index,
                     config_edge_weight,
+                    # config_edge_mask,
+                    # config_edge_path_len,
+                    config_runtime,
                 ) = (
                     node_feat.to(device),
                     node_opcode.to(device),
                     edge_index.to(device),
                     node_config_feat.to(device),
                     node_config_ids.to(device),
-                    config_runtime.to(device),
                     config_edge_index.to(device),
                     config_edge_weight.to(device),
+                    # config_edge_mask.to(device),
+                    # config_edge_path_len.to(device),
+                    config_runtime.to(device),
                 )
 
                 out = self.model(
@@ -187,6 +194,9 @@ class LayoutPipeline(Pipeline):
                     node_config_ids,
                     config_edge_index,
                     config_edge_weight,
+                    # config_edge_path,
+                    # config_edge_mask,
+                    # config_edge_path_len,
                 )
 
                 loss = self.criterion(out, config_runtime)
@@ -300,6 +310,9 @@ class LayoutPipeline(Pipeline):
             config_runtime = record["config_runtime"]
             config_edge_index = record["config_edge_index"]
             config_edge_weight = record["config_edge_weight"]
+            config_edge_path = record["config_edge_path"]
+            # config_edge_mask = record["config_edge_mask"]
+            # config_edge_path_len = record["config_edge_path_len"]
 
             (
                 node_feat,
@@ -309,6 +322,8 @@ class LayoutPipeline(Pipeline):
                 node_config_ids,
                 config_edge_index,
                 config_edge_weight,
+                # config_edge_mask,
+                # config_edge_path_len,
             ) = (
                 node_feat.to(device),
                 node_opcode.to(device),
@@ -317,6 +332,8 @@ class LayoutPipeline(Pipeline):
                 node_config_ids.to(device),
                 config_edge_index.to(device),
                 config_edge_weight.to(device),
+                # config_edge_mask.to(device),
+                # config_edge_path_len.to(device),
             )
 
             c = len(config_runtime)
@@ -332,6 +349,9 @@ class LayoutPipeline(Pipeline):
                     node_config_ids,
                     config_edge_index,
                     config_edge_weight,
+                    # config_edge_path,
+                    # config_edge_mask,
+                    # config_edge_path_len,
                 )
                 outs.append(out.detach().cpu())
             return torch.concat(outs)
