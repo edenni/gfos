@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 
 import numpy as np
 import torch
@@ -8,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from ..data.dataset import LayoutDataset, Normalizer
+from ..data.dataset import LayoutDataset, LayoutDatasetPreset, Normalizer
 from ..data.utils import load_layout
 from ..metrics import LayoutMetrics
 from .base import Pipeline
@@ -22,11 +23,13 @@ class LayoutPipeline(Pipeline):
     def create_dataset(self, train: bool = True, test: bool = False):
         # Read configs
         layout_dir = self.cfg.paths.layout_dir
+        indices_dir = self.cfg.paths.indices_dir
         source = self.cfg.dataset.source
         search = self.cfg.dataset.search
         max_configs = self.cfg.dataset.max_configs
         num_configs = self.cfg.dataset.num_configs
         normalizer_path = self.cfg.dataset.normalizer_path
+        fold = self.cfg.dataset.fold
 
         # Validate configs
         assert source in ("xla", "nlp"), f"Unknown source {source}"
@@ -55,24 +58,47 @@ class LayoutPipeline(Pipeline):
             normalizer_path, source=source, search=search
         )
 
-        # Create training and validation dataset
-        if train:
-            self.train_dataset = LayoutDataset(
-                files=layout_files["train"],
-                max_configs=max_configs,
-                num_configs=num_configs,
-                normalizer=normalizer,
-            )
+        if fold is None or fold < 0:
+            # Create training and validation dataset
+            if train:
+                self.train_dataset = LayoutDataset(
+                    files=layout_files["train"],
+                    max_configs=max_configs,
+                    num_configs=num_configs,
+                    normalizer=normalizer,
+                )
 
-            self.valid_dataset = LayoutDataset(
-                files=layout_files["valid"],
-                normalizer=normalizer,
-            )
-        if test:
-            self.test_dataset = LayoutDataset(
-                files=layout_files["test"],
-                normalizer=normalizer,
-            )
+                self.valid_dataset = LayoutDataset(
+                    files=layout_files["valid"],
+                    normalizer=normalizer,
+                )
+            if test:
+                self.test_dataset = LayoutDataset(
+                    files=layout_files["test"],
+                    normalizer=normalizer,
+                )
+        else:
+            logger.info(f"Using fold {fold}")
+            all_files = layout_files["train"] + layout_files["valid"]
+            if train:
+                self.train_dataset = LayoutDatasetPreset(
+                    files=all_files,
+                    max_configs=max_configs,
+                    num_configs=num_configs,
+                    normalizer=normalizer,
+                    indices_dir=f"{indices_dir}/{fold}/train",
+                )
+
+                self.valid_dataset = LayoutDatasetPreset(
+                    files=layout_files["valid"],
+                    normalizer=normalizer,
+                    indices_dir=f"{indices_dir}/{fold}/valid",
+                )
+            if test:
+                self.test_dataset = LayoutDataset(
+                    files=layout_files["test"],
+                    normalizer=normalizer,
+                )
 
     @property
     def device(self):
@@ -140,139 +166,155 @@ class LayoutPipeline(Pipeline):
         loss_mean = 0
         not_improved = 0
 
-        for epoch in range(num_epochs):
-            # Shuffle the training dataset
-            permutation = np.random.permutation(len(self.train_dataset))
+        try:
+            for epoch in range(num_epochs):
+                # Shuffle the training dataset
+                permutation = np.random.permutation(len(self.train_dataset))
 
-            # Training phase
-            self.model.train()
-            pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
+                # Training phase
+                self.model.train()
+                pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
 
-            for i in pbar:
-                record = self.train_dataset[i]
-                node_feat = record["node_feat"]
-                node_opcode = record["node_opcode"]
-                edge_index = record["edge_index"]
-                node_config_feat = record["node_config_feat"]
-                node_config_ids = record["node_config_ids"]
-                config_runtime = record["config_runtime"]
-                config_edge_index = record["config_edge_index"]
-                config_edge_weight = record["config_edge_weight"]
-                # config_edge_mask = record["config_edge_mask"]
-                # config_edge_path_len = record["config_edge_path_len"]
-                # config_edge_path = record["config_edge_path"]
+                for i in pbar:
+                    record = self.train_dataset[i]
+                    node_feat = record["node_feat"]
+                    node_opcode = record["node_opcode"]
+                    edge_index = record["edge_index"]
+                    node_config_feat = record["node_config_feat"]
+                    node_config_ids = record["node_config_ids"]
+                    config_runtime = record["config_runtime"]
+                    config_edge_index = record["config_edge_index"]
+                    config_edge_weight = record["config_edge_weight"]
+                    # config_edge_mask = record["config_edge_mask"]
+                    # config_edge_path_len = record["config_edge_path_len"]
+                    # config_edge_path = record["config_edge_path"]
 
-                (
-                    node_feat,
-                    node_opcode,
-                    edge_index,
-                    node_config_feat,
-                    node_config_ids,
-                    config_edge_index,
-                    config_edge_weight,
-                    # config_edge_mask,
-                    # config_edge_path_len,
-                    config_runtime,
-                ) = (
-                    node_feat.to(device),
-                    node_opcode.to(device),
-                    edge_index.to(device),
-                    node_config_feat.to(device),
-                    node_config_ids.to(device),
-                    config_edge_index.to(device),
-                    config_edge_weight.to(device),
-                    # config_edge_mask.to(device),
-                    # config_edge_path_len.to(device),
-                    config_runtime.to(device),
-                )
+                    (
+                        node_feat,
+                        node_opcode,
+                        edge_index,
+                        node_config_feat,
+                        node_config_ids,
+                        config_edge_index,
+                        config_edge_weight,
+                        # config_edge_mask,
+                        # config_edge_path_len,
+                        config_runtime,
+                    ) = (
+                        node_feat.to(device),
+                        node_opcode.to(device),
+                        edge_index.to(device),
+                        node_config_feat.to(device),
+                        node_config_ids.to(device),
+                        config_edge_index.to(device),
+                        config_edge_weight.to(device),
+                        # config_edge_mask.to(device),
+                        # config_edge_path_len.to(device),
+                        config_runtime.to(device),
+                    )
 
-                out = self.model(
-                    node_feat,
-                    node_opcode,
-                    edge_index,
-                    node_config_feat,
-                    node_config_ids,
-                    config_edge_index,
-                    config_edge_weight,
-                    # config_edge_path,
-                    # config_edge_mask,
-                    # config_edge_path_len,
-                )
+                    out = self.model(
+                        node_feat,
+                        node_opcode,
+                        edge_index,
+                        node_config_feat,
+                        node_config_ids,
+                        config_edge_index,
+                        config_edge_weight,
+                        # config_edge_path,
+                        # config_edge_mask,
+                        # config_edge_path_len,
+                    )
 
-                loss = self.criterion(out, config_runtime)
-                loss = loss / accum_iter
-                loss_mean += loss.item()
-                loss.backward()
+                    loss = self.criterion(out, config_runtime)
+                    loss = loss / accum_iter
+                    loss_mean += loss.item()
+                    loss.backward()
 
-                pbar.set_postfix_str(f"loss: {loss:.4f}")
+                    pbar.set_postfix_str(f"loss: {loss:.4f}")
 
-                if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
-                    i + 1 == len(self.train_dataset)
+                    if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
+                        i + 1 == len(self.train_dataset)
+                    ):
+                        if grad_clip > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.model.parameters(), grad_clip
+                            )
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+
+                        if use_logger:
+                            wandb.log(
+                                {
+                                    "epoch": epoch,
+                                    "train/lr_slow": self.optimizer.param_groups[
+                                        0
+                                    ][
+                                        "lr"
+                                    ],
+                                    "train/lr_fast": self.optimizer.param_groups[
+                                        -1
+                                    ][
+                                        "lr"
+                                    ],
+                                    "train/loss": loss_mean,
+                                }
+                            )
+                        loss_mean = 0
+                pbar.close()
+
+                # Validation phase
+                if (
+                    epoch + 1
+                ) % num_val_epochs != 0 and epoch != num_epochs - 1:
+                    continue
+
+                self.model.eval()
+                metrics = LayoutMetrics()
+
+                for record in tqdm(
+                    self.valid_dataset,
+                    desc=f"Valid epoch: {epoch}",
+                    leave=False,
                 ):
-                    if grad_clip > 0:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.model.parameters(), grad_clip
-                        )
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
+                    config_runtime: torch.Tensor = record["config_runtime"]
+                    outs: torch.Tensor = self._predict_one(
+                        record, infer_bs, device
+                    )
+                    metrics.add(
+                        record["model_id"],
+                        outs.numpy(),
+                        config_runtime.numpy(),
+                    )
 
-                    if use_logger:
-                        wandb.log(
-                            {
-                                "epoch": epoch,
-                                "train/lr_slow": self.optimizer.param_groups[
-                                    0
-                                ]["lr"],
-                                "train/lr_fast": self.optimizer.param_groups[
-                                    -1
-                                ]["lr"],
-                                "train/loss": loss_mean,
-                            }
-                        )
-                    loss_mean = 0
-            pbar.close()
+                prefix = "val/"
+                scores = metrics.compute_scores(prefix=prefix)
 
-            # Validation phase
-            if (epoch + 1) % num_val_epochs != 0 and epoch != num_epochs - 1:
-                continue
+                if isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
+                    kendall = scores[f"{prefix}index_kendall"]
+                    self.scheduler.step(kendall)
 
-            self.model.eval()
-            metrics = LayoutMetrics()
-
-            for record in tqdm(
-                self.valid_dataset, desc=f"Valid epoch: {epoch}", leave=False
-            ):
-                config_runtime: torch.Tensor = record["config_runtime"]
-                outs: torch.Tensor = self._predict_one(
-                    record, infer_bs, device
-                )
-                metrics.add(
-                    record["model_id"], outs.numpy(), config_runtime.numpy()
-                )
-
-            prefix = "val/"
-            scores = metrics.compute_scores(prefix=prefix)
-
-            if isinstance(
-                self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
-            ):
-                kendall = scores[f"{prefix}index_kendall"]
-                self.scheduler.step(kendall)
-
-            if use_logger:
-                wandb.log(scores)
-
-            # Update best scores and save the model
-            if kendall > best_score:
-                best_score = kendall
-                print(f"Best score updated at epoch {epoch}: {best_score:.4f}")
                 if use_logger:
-                    self.best_model_path = self._save_model(epoch, kendall)
-                not_improved = 0
-            else:
-                not_improved += 1
-                if early_stopping > 0 and not_improved == early_stopping:
-                    break
+                    wandb.log(scores)
+
+                # Update best scores and save the model
+                if kendall > best_score:
+                    best_score = kendall
+                    print(
+                        f"Best score updated at epoch {epoch}: {best_score:.4f}"
+                    )
+                    if use_logger:
+                        self.best_model_path = self._save_model(epoch, kendall)
+                    not_improved = 0
+                else:
+                    not_improved += 1
+                    if early_stopping > 0 and not_improved == early_stopping:
+                        break
+
+        except KeyboardInterrupt:
+            pass
 
         if use_logger:
             self._save_model(epoch, kendall, suffix="_last")
@@ -310,7 +352,7 @@ class LayoutPipeline(Pipeline):
             config_runtime = record["config_runtime"]
             config_edge_index = record["config_edge_index"]
             config_edge_weight = record["config_edge_weight"]
-            config_edge_path = record["config_edge_path"]
+            # config_edge_path = record["config_edge_path"]
             # config_edge_mask = record["config_edge_mask"]
             # config_edge_path_len = record["config_edge_path_len"]
 
@@ -358,6 +400,7 @@ class LayoutPipeline(Pipeline):
 
     def test(self):
         if self.best_model_path is not None:
+            logger.info(f"Loading best model from {self.best_model_path}")
             state_dict = torch.load(self.best_model_path)
             if "state_dict" in state_dict:
                 state_dict = state_dict["state_dict"]
@@ -375,11 +418,13 @@ class LayoutPipeline(Pipeline):
         self.model.to(device).eval()
 
         results = {}
+        logits = {}
         for record in tqdm(self.test_dataset, desc="Testing"):
             model_id = record["model_id"]
             outs = self._predict_one(record, infer_bs, device)
             pred_idx = np.argsort(outs.numpy())
             results[model_id] = pred_idx.tolist()
+            logits[model_id] = outs.numpy()
 
         # Write test results to file
         source = self.cfg.dataset.source
@@ -395,5 +440,8 @@ class LayoutPipeline(Pipeline):
                 model_id = f"layout:{source}:{search}:" + k
                 values = ";".join([str(i) for i in v])
                 f.write(f"{model_id},{values}\n")
+
+        with open(output_path.replace(".csv", "_logits.plk"), "wb") as f:
+            pickle.dump(logits, f)
 
         wandb.finish()

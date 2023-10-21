@@ -6,3 +6,4 @@ max_configs: 6400
 num_configs: 128
 normalizer_path: ${paths.root_dir}/data/normalizer.json
 config_edge_weight: false
+fold: -1
