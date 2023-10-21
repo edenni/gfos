@@ -11,7 +11,7 @@ defaults:
 
 dataset:
   source: xla
-  search: random
+  search: default
   max_configs: 10240
   num_configs: 128
 
@@ -26,7 +26,7 @@ model:
 
   config_layer: SAGEConv
   num_config_layers: 4
-  config_dim: 64
+  config_dim: 32
   use_config_edge_weight: false
   use_config_edge_attr: false
 
@@ -53,14 +53,18 @@ trainer:
   num_val_epochs: 40
   infer_bs: 100
   early_stopping: 10
-  accum_iter: 8
+  accum_iter: 4
   grad_clip: 0.0
 
 scheduler:
-  patience: 4
+  patience: 2
+
+loss:
+  margin: 0.5
 
 optimizer:
-  lr: 5e-3
-  weight_decay: 1e-5
+  lr: 1e-3
+  betas: [0.9, 0.999]
+  weight_decay: 1e-6
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
