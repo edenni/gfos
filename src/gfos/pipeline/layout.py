@@ -9,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from ..data.dataset import LayoutDataset, LayoutDatasetPreset, Normalizer
+from ..data.dataset import LayoutDataset, Normalizer
 from ..data.utils import load_layout
 from ..metrics import LayoutMetrics
 from .base import Pipeline
@@ -59,46 +59,41 @@ class LayoutPipeline(Pipeline):
         )
 
         if fold is None or fold < 0:
-            # Create training and validation dataset
-            if train:
-                self.train_dataset = LayoutDataset(
-                    files=layout_files["train"],
-                    max_configs=max_configs,
-                    num_configs=num_configs,
-                    normalizer=normalizer,
-                )
-
-                self.valid_dataset = LayoutDataset(
-                    files=layout_files["valid"],
-                    normalizer=normalizer,
-                )
-            if test:
-                self.test_dataset = LayoutDataset(
-                    files=layout_files["test"],
-                    normalizer=normalizer,
-                )
-        else:
+            train_files = layout_files["train"]
+            valid_files = layout_files["valid"]
+            train_indices_dir = valid_indices_dir = None
+        elif fold >= 0:
             logger.info(f"Using fold {fold}")
-            all_files = layout_files["train"] + layout_files["valid"]
-            if train:
-                self.train_dataset = LayoutDatasetPreset(
-                    files=all_files,
-                    max_configs=max_configs,
-                    num_configs=num_configs,
-                    normalizer=normalizer,
-                    indices_dir=f"{indices_dir}/{fold}/train",
+            fold_dir = f"{indices_dir}/{fold}"
+            if indices_dir is None or not os.path.exists(fold_dir):
+                raise FileNotFoundError(
+                    f"Indices directory {fold_dir} not found"
                 )
 
-                self.valid_dataset = LayoutDatasetPreset(
-                    files=layout_files["valid"],
-                    normalizer=normalizer,
-                    indices_dir=f"{indices_dir}/{fold}/valid",
-                )
-            if test:
-                self.test_dataset = LayoutDataset(
-                    files=layout_files["test"],
-                    normalizer=normalizer,
-                )
+            # Pass all files to Dataset and filter files inside __init__
+            train_files = layout_files["train"] + layout_files["valid"]
+            valid_files = layout_files["train"] + layout_files["valid"]
+            train_indices_dir = f"{fold_dir}/train"
+            valid_indices_dir = f"{fold_dir}/valid"
+
+        if train:
+            self.train_dataset = LayoutDataset(
+                files=train_files,
+                max_configs=max_configs,
+                num_configs=num_configs,
+                normalizer=normalizer,
+                indices_dir=train_indices_dir,
+            )
+            self.valid_dataset = LayoutDataset(
+                files=valid_files,
+                normalizer=normalizer,
+                indices_dir=valid_indices_dir,
+            )
+        if test:
+            self.test_dataset = LayoutDataset(
+                files=layout_files["test"],
+                normalizer=normalizer,
+            )
 
     @property
     def device(self):
@@ -166,6 +161,7 @@ class LayoutPipeline(Pipeline):
         loss_mean = 0
         not_improved = 0
 
+        # Catch keyboard interrupt, infer on test set, and exit
         try:
             for epoch in range(num_epochs):
                 # Shuffle the training dataset
@@ -185,8 +181,6 @@ class LayoutPipeline(Pipeline):
                     config_runtime = record["config_runtime"]
                     config_edge_index = record["config_edge_index"]
                     config_edge_weight = record["config_edge_weight"]
-                    # config_edge_mask = record["config_edge_mask"]
-                    # config_edge_path_len = record["config_edge_path_len"]
                     # config_edge_path = record["config_edge_path"]
 
                     (
@@ -197,8 +191,6 @@ class LayoutPipeline(Pipeline):
                         node_config_ids,
                         config_edge_index,
                         config_edge_weight,
-                        # config_edge_mask,
-                        # config_edge_path_len,
                         config_runtime,
                     ) = (
                         node_feat.to(device),
@@ -208,8 +200,6 @@ class LayoutPipeline(Pipeline):
                         node_config_ids.to(device),
                         config_edge_index.to(device),
                         config_edge_weight.to(device),
-                        # config_edge_mask.to(device),
-                        # config_edge_path_len.to(device),
                         config_runtime.to(device),
                     )
 
@@ -221,9 +211,6 @@ class LayoutPipeline(Pipeline):
                         node_config_ids,
                         config_edge_index,
                         config_edge_weight,
-                        # config_edge_path,
-                        # config_edge_mask,
-                        # config_edge_path_len,
                     )
 
                     loss = self.criterion(out, config_runtime)
@@ -243,23 +230,13 @@ class LayoutPipeline(Pipeline):
                         self.optimizer.step()
                         self.optimizer.zero_grad()
 
+                        log_params = {
+                            "epoch": epoch,
+                            "train/lr": self.optimizer.param_groups[0]["lr"],
+                            "train/loss": loss_mean,
+                        }
                         if use_logger:
-                            wandb.log(
-                                {
-                                    "epoch": epoch,
-                                    "train/lr_slow": self.optimizer.param_groups[
-                                        0
-                                    ][
-                                        "lr"
-                                    ],
-                                    "train/lr_fast": self.optimizer.param_groups[
-                                        -1
-                                    ][
-                                        "lr"
-                                    ],
-                                    "train/loss": loss_mean,
-                                }
-                            )
+                            wandb.log(log_params)
                         loss_mean = 0
                 pbar.close()
 
@@ -303,7 +280,8 @@ class LayoutPipeline(Pipeline):
                 if kendall > best_score:
                     best_score = kendall
                     print(
-                        f"Best score updated at epoch {epoch}: {best_score:.4f}"
+                        "Best score updated "
+                        f"at epoch {epoch}: {best_score:.4f}"
                     )
                     if use_logger:
                         self.best_model_path = self._save_model(epoch, kendall)
