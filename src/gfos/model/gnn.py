@@ -143,8 +143,6 @@ class LayoutModel(torch.nn.Module):
         assert (
             num_layers > 1
         ), f"num_layers must be greater than 1 but got {num_layers}"
-        # if conv_layer == "SAGEConv" and use_edge_weight:
-        #     raise ValueError("SAGEConv does not support edge weights")
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
@@ -196,23 +194,6 @@ class LayoutModel(torch.nn.Module):
             else "x0, edge_index",
             conv_layers,
         )
-
-    @torch.jit.script
-    def reduce_node_to_edge(x, config_paths):
-        # Pre-allocate memory for the result
-        means = torch.empty(
-            len(config_paths), x.size(1), dtype=x.dtype, device=x.device
-        )
-
-        # Loop over config_paths
-        for i, path in enumerate(config_paths):
-            # Convert each path to a tensor
-            path_tensor = torch.tensor(path, dtype=torch.long, device=x.device)
-
-            # Index into x and compute the mean
-            means[i] = x[path_tensor].mean(dim=0)
-
-        return means
 
     def forward(
         self,

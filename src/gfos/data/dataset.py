@@ -306,19 +306,6 @@ class LayoutDataset(Dataset):
                 edge_weight, dtype=torch.float
             )
             record["config_edge_path"] = paths
-            # mask = torch.zeros(
-            #     len(paths),
-            #     record["node_feat"].shape[0],
-            #     record["node_feat"].shape[1],
-            #     dtype=torch.bool,
-            # )
-            # for i, path in enumerate(paths):
-            #     mask[i, path, :] = 1
-            # record["config_edge_mask"] = mask
-
-            # record["config_edge_path_len"] = torch.tensor(
-            #     [len(p) for p in paths]
-            # ).view(-1, 1)
 
             config_edge_index = torch.tensor(
                 np.swapaxes(config_edge_index, 0, 1),
@@ -381,8 +368,6 @@ class LayoutDataset(Dataset):
         config_edge_index = record["config_edge_index"]
         config_edge_weight = record["config_edge_weight"]
         config_edge_path = record["config_edge_path"]
-        # config_edge_mask = record["config_edge_mask"]
-        # config_edge_path_len = record["config_edge_path_len"]
 
         c = len(config_runtime)
 
