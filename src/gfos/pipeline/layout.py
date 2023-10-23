@@ -64,7 +64,7 @@ class LayoutPipeline(Pipeline):
             train_indices_dir = valid_indices_dir = None
         elif fold >= 0:
             logger.info(f"Using fold {fold}")
-            fold_dir = f"{indices_dir}/{fold}"
+            fold_dir = f"{indices_dir}/{source}_{search}/{fold}"
             if indices_dir is None or not os.path.exists(fold_dir):
                 raise FileNotFoundError(
                     f"Indices directory {fold_dir} not found"
@@ -139,6 +139,7 @@ class LayoutPipeline(Pipeline):
             run = wandb.init(
                 project=self.cfg.logger.project,
                 dir=self.cfg.paths.output_dir,
+                group=self.cfg.logger.group,
                 name=self.cfg.logger.name,
                 config=OmegaConf.to_container(
                     self.cfg, resolve=True, throw_on_missing=True
