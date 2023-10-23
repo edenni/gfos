@@ -140,7 +140,7 @@ class LayoutDataset(Dataset):
             if bins is not None:
                 cls_lables = np.digitize(runtime, bins)
 
-            if runtime_mean is not None or runtime_std is not None:
+            if runtime_mean is None or runtime_std is None:
                 runtime = (runtime - runtime.mean()) / runtime.std()
             else:
                 runtime = (runtime - runtime_mean) / runtime_std
