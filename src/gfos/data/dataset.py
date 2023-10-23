@@ -97,6 +97,8 @@ class LayoutDataset(Dataset):
         normalizer: Normalizer = None,
         bins: np.array = None,
         indices_dir: str = None,
+        runtime_mean: float = None,
+        runtime_std: float = None,
     ):
         self.max_configs = max_configs
         self.num_configs = num_configs
@@ -119,13 +121,13 @@ class LayoutDataset(Dataset):
         pbar = tqdm(self.files, desc="Loading data")
 
         # Load all runtime and calculate mean and std
-        all_runtime = []
-        for file in self.files:
-            record = dict(np.load(file))
-            all_runtime.append(record["config_runtime"])
-        all_runtime = np.concatenate(all_runtime)
-        mu = all_runtime.mean()
-        std = all_runtime.std()
+        # all_runtime = []
+        # for file in self.files:
+        #     record = dict(np.load(file))
+        #     all_runtime.append(record["config_runtime"])
+        # all_runtime = np.concatenate(all_runtime)
+        # mu = all_runtime.mean()
+        # std = all_runtime.std()
 
         for file in pbar:
             record = dict(np.load(file))
@@ -138,7 +140,10 @@ class LayoutDataset(Dataset):
             if bins is not None:
                 cls_lables = np.digitize(runtime, bins)
 
-            runtime = (runtime - mu) / std
+            if runtime_mean is not None or runtime_std is not None:
+                runtime = (runtime - runtime.mean()) / runtime.std()
+            else:
+                runtime = (runtime - runtime_mean) / runtime_std
 
             if indices_dir is not None:
                 indices_file = Path(indices_dir) / f"{model_id}.npy"

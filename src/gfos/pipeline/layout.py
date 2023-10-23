@@ -9,6 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+from ..data.constants import CONFIG_RUNTIME_MEAN_STD
 from ..data.dataset import LayoutDataset, Normalizer
 from ..data.utils import load_layout
 from ..metrics import LayoutMetrics
@@ -57,6 +58,8 @@ class LayoutPipeline(Pipeline):
         normalizer = Normalizer.from_json(
             normalizer_path, source=source, search=search
         )
+        runtime_mean = CONFIG_RUNTIME_MEAN_STD[source][search]["mean"]
+        runtime_std = CONFIG_RUNTIME_MEAN_STD[source][search]["std"]
 
         if fold is None or fold < 0:
             train_files = layout_files["train"]
@@ -83,11 +86,15 @@ class LayoutPipeline(Pipeline):
                 num_configs=num_configs,
                 normalizer=normalizer,
                 indices_dir=train_indices_dir,
+                runtime_mean=runtime_mean,
+                runtime_std=runtime_std,
             )
             self.valid_dataset = LayoutDataset(
                 files=valid_files,
                 normalizer=normalizer,
                 indices_dir=valid_indices_dir,
+                runtime_mean=runtime_mean,
+                runtime_std=runtime_std,
             )
         if test:
             self.test_dataset = LayoutDataset(
