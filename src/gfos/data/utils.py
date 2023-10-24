@@ -5,8 +5,8 @@ from collections import defaultdict
 
 def load_layout(
     base_dir: str,
-    compile_type: str | None = None,
-    model_type: str | None = None,
+    compile_type: str = None,
+    model_type: str = None,
 ):
     if model_type is not None:
         assert model_type in (

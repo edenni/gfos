@@ -8,14 +8,18 @@ op_embedding_dim: 32
 node_layer: SAGEConv
 num_node_layers: 4
 node_dim: 64
+node_dropout_between_layers: 0.0
 
 config_neighbor_layer: GATConv
 num_config_neighbor_layers: 2
 config_neighbor_dim: 64
+config_neighbor_dropout_between_layers: 0.0
 
 config_layer: SAGEConv
 num_config_layers: 4
 config_dim: 64
+config_dropout_between_layers: 0.0
+
 use_config_edge_weight: false
 use_config_edge_attr: false
 edge_dim: 

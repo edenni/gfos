@@ -148,11 +148,45 @@ class LayoutPipeline(Pipeline):
                 dir=self.cfg.paths.output_dir,
                 group=self.cfg.logger.group,
                 name=self.cfg.logger.name,
-                config=OmegaConf.to_container(
-                    self.cfg, resolve=True, throw_on_missing=True
-                ),
                 tags=self.cfg.logger.tags,
             )
+
+            if self.cfg.get("sweep") is not None:
+                self.cfg.model.num_node_layers = wandb.config.num_node_layers
+                self.cfg.model.num_config_layers = (
+                    wandb.config.num_config_layers
+                )
+                self.cfg.model.num_config_neighbor_layers = (
+                    wandb.config.num_config_neighbor_layers
+                )
+                self.cfg.model.node_dim = wandb.config.node_dim
+                self.cfg.model.config_dim = wandb.config.config_dim
+                self.cfg.model.config_neighbor_dim = (
+                    wandb.config.config_neighbor_dim
+                )
+
+                self.cfg.model.node_dropout_between_layers = (
+                    wandb.config.node_dropout_between_layers
+                )
+                self.cfg.model.config_dropout_between_layers = (
+                    wandb.config.config_dropout_between_layers
+                )
+                self.cfg.model.config_neighbor_dropout_between_layers = (
+                    wandb.config.config_neighbor_dropout_between_layers
+                )
+                self.cfg.model.head_dim = wandb.config.head_dim
+                self.cfg.model.dropout = wandb.config.dropout
+                self.cfg.model.jk_mode = wandb.config.jk_mode
+
+                self.cfg.optimizer.weight_decay = wandb.config.weight_decay
+                self.cfg.trainer.accum_iter = wandb.config.accum_iter
+
+            wandb.config.update(
+                OmegaConf.to_container(
+                    self.cfg, resolve=True, throw_on_missing=True
+                )
+            )
+
             run.watch(self.model, log="all")
             run.log_code("./src/gfos")
 
@@ -308,6 +342,8 @@ class LayoutPipeline(Pipeline):
         if "test" not in self.cfg.tasks:
             wandb.finish()
 
+        return best_score
+
     def _save_model(self, epoch: int, score: float, suffix: str = "") -> str:
         filename = f"{epoch}_{score:.4f}{suffix}.pth"
         path = os.path.join(wandb.run.dir, filename)
@@ -431,3 +467,12 @@ class LayoutPipeline(Pipeline):
             pickle.dump(logits, f)
 
         wandb.finish()
+
+    def tune(self):
+        sweep_id = wandb.sweep(
+            sweep=OmegaConf.to_container(self.cfg.sweep),
+            project=self.cfg.logger.project,
+            entity="edenn0",
+        )
+        logger.info("Wake up sweep agent")
+        wandb.agent(sweep_id=sweep_id, function=self.train, count=100)

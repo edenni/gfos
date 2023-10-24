@@ -1,0 +1,33 @@
+method: bayes
+metric:
+  name: val/index_kendall
+  goal: maximize
+parameters:
+  num_node_layers:
+    values: [3, 4, 5]
+  num_config_neighbor_layers:
+    values: [1, 2, 3]
+  num_config_layers:
+    values: [3, 4, 5]
+  node_dim:
+    values: [32, 64, 96]
+  config_neighbor_dim:
+    values: [32, 64, 96]
+  config_dim:
+    values: [32, 64, 96]
+  head_dim:
+    values: [32, 64, 96]
+  dropout:
+    values: [0.1, 0.2, 0.3]
+  jk_mode:
+    values: [null, cat]
+  weight_decay:
+    values: [0.0, 1e-7, 1e-6, 1e-5]
+  accum_iter:
+    values: [4, 8]
+  node_dropout_between_layers:
+    values: [0.0, 0.1, 0.2]
+  config_neighbor_dropout_between_layers:
+    values: [0.0, 0.1, 0.2]
+  config_dropout_between_layers:
+    values: [0.0, 0.1, 0.2]

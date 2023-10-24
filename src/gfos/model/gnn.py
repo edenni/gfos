@@ -21,16 +21,19 @@ class LayoutModel(torch.nn.Module):
         node_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_node_layers: int = 4,
         node_dim: int = 64,
+        node_dropout_between_layers: float = 0.0,
         node_conv_kwargs: dict = {},
         config_neighbor_layer: Literal[
             "GATConv", "GCNConv", "SAGEConv"
         ] = "SAGEConv",
         num_config_neighbor_layers: int = 2,
         config_neighbor_dim: int = 64,
+        config_neighbor_dropout_between_layers: float = 0.0,
         config_neighbor_conv_kwargs: dict = {},
         config_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_config_layers: int = 4,
         config_dim: int = 64,
+        config_dropout_between_layers: float = 0.0,
         use_config_edge_weight: bool = False,
         use_config_edge_attr: bool = False,
         edge_dim: int = 32,
@@ -63,6 +66,7 @@ class LayoutModel(torch.nn.Module):
             hidden_channels=node_dim,
             out_channels=node_dim,
             activation=activation,
+            inner_dropout=node_dropout_between_layers,
             use_edge_weight=False,
             jk_mode=jk_mode,
             jk_kwargs=jk_kwargs,
@@ -82,6 +86,7 @@ class LayoutModel(torch.nn.Module):
             hidden_channels=config_neighbor_dim,
             out_channels=config_neighbor_dim,
             activation=activation,
+            inner_dropout=config_neighbor_dropout_between_layers,
             use_edge_weight=False,
             **config_neighbor_conv_kwargs,
         )
@@ -93,6 +98,7 @@ class LayoutModel(torch.nn.Module):
             hidden_channels=config_dim,
             out_channels=config_dim,
             activation=activation,
+            inner_dropout=config_dropout_between_layers,
             dropout=dropout,
             use_edge_weight=self.use_weight or self.use_attr,
             **config_conv_kwargs,
@@ -121,6 +127,7 @@ class LayoutModel(torch.nn.Module):
         out_channels: int,
         activation: str,
         dropout: float = 0.0,
+        inner_dropout: float = 0.0,
         use_edge_weight: bool = False,
         jk_mode: str = None,
         jk_kwargs: dict = {},
@@ -163,8 +170,18 @@ class LayoutModel(torch.nn.Module):
         for i, (in_plane, out_plane) in enumerate(
             zip(channels[:-1], channels[1:])
         ):
+            # Not added at the start of the module
+            if inner_dropout > 0 and len(conv_layers) > 0:
+                if not (
+                    len(conv_layer[-1]) > 0
+                    and isinstance(conv_layer[-1][0], nn.Dropout)
+                ):
+                    conv_layers.append(
+                        (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}")
+                    )
             conv_layers.extend(
                 [
+                    (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}"),
                     (
                         conv_layer(in_plane, out_plane, **conv_kwargs),
                         f"x{i}, edge_index, edge_weight -> x{i+1}"

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from scipy.stats import kendalltau
-from torchmetrics import Metric
 
 
 def kendall(predicted_rankings: np.array, actual_rankings: np.array) -> float:

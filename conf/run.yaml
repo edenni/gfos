@@ -10,6 +10,7 @@ defaults:
   - loss: null
   - logger: null
   - trainer: null
+  - sweep: null
   - _self_
 
   - experiment: null

@@ -1,11 +1,11 @@
 import logging
 
 import hydra
-import pytorch_lightning as pl
 from omegaconf import DictConfig
 
 from gfos.pipeline import pipelines
 from gfos.utils.rich import print_config_tree
+from gfos.utils.misc import seed_everything
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
         print_config_tree(cfg, save_to_file=False)
 
     seed = cfg.get("seed", 42)
-    pl.seed_everything(seed)
+    seed_everything(seed)
 
     pipeline = pipelines[cfg.pipeline]
     logger.info(f"Running pipeline <{pipeline.pipeline_name}>")
