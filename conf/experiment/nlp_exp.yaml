@@ -32,6 +32,9 @@ model:
   dropout: 0.2
   activation: LeakyReLU
 
+loss:
+  number_permutations: 10
+
 hydra:
   job:
     name: ${run_name}
