@@ -173,15 +173,15 @@ class LayoutModel(torch.nn.Module):
             # Not added at the start of the module
             if inner_dropout > 0 and len(conv_layers) > 0:
                 if not (
-                    len(conv_layer[-1]) > 0
-                    and isinstance(conv_layer[-1][0], nn.Dropout)
+                    isinstance(conv_layers[-1], tuple)
+                    and len(conv_layers[-1]) > 0
+                    and isinstance(conv_layers[-1][0], nn.Dropout)
                 ):
                     conv_layers.append(
                         (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}")
                     )
             conv_layers.extend(
                 [
-                    (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}"),
                     (
                         conv_layer(in_plane, out_plane, **conv_kwargs),
                         f"x{i}, edge_index, edge_weight -> x{i+1}"

@@ -22,6 +22,11 @@ class LayoutPipeline(Pipeline):
     pipeline_name = "layout"
 
     def create_dataset(self, train: bool = True, test: bool = False):
+        if (
+            getattr(self, "train_dataset", None) is not None
+            and getattr(self, "valid_dataset", None) is not None
+        ):
+            return
         # Read configs
         layout_dir = self.cfg.paths.layout_dir
         indices_dir = self.cfg.paths.indices_dir
@@ -179,7 +184,6 @@ class LayoutPipeline(Pipeline):
                 self.cfg.model.jk_mode = wandb.config.jk_mode
 
                 self.cfg.optimizer.weight_decay = wandb.config.weight_decay
-                self.cfg.trainer.accum_iter = wandb.config.accum_iter
 
             wandb.config.update(
                 OmegaConf.to_container(
@@ -474,5 +478,10 @@ class LayoutPipeline(Pipeline):
             project=self.cfg.logger.project,
             entity="edenn0",
         )
-        logger.info("Wake up sweep agent")
-        wandb.agent(sweep_id=sweep_id, function=self.train, count=100)
+        wandb.agent(
+            sweep_id=sweep_id,
+            function=self.train,
+            entity="edenn0",
+            project=self.cfg.logger.project,
+            count=100,
+        )
