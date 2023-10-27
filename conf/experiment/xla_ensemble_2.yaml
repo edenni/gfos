@@ -1,5 +1,5 @@
 # @package _global_
-
+# splitting method from kawashima-san
 defaults:
   - override /model: layout
   - override /optimizer: adamw
@@ -34,11 +34,11 @@ model:
 
 hydra:
   job:
-    name: xla_ensemble
+    name: xla_ensemble_2
 
 logger:
   project: ${project}
-  group: xla_ensemble
+  group: xla_ensemble_2
   name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline

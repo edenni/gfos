@@ -71,8 +71,10 @@ class LayoutPipeline(Pipeline):
             valid_files = layout_files["valid"]
             train_indices_dir = valid_indices_dir = None
         elif fold >= 0:
-            logger.info(f"Using fold {fold}")
             fold_dir = f"{indices_dir}/{source}_{search}/{fold}"
+            logger.info(f"Using fold {fold}")
+            logger.info(f"Loading indices from {fold_dir}")
+
             if indices_dir is None or not os.path.exists(fold_dir):
                 raise FileNotFoundError(
                     f"Indices directory {fold_dir} not found"
