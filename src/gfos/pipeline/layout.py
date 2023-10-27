@@ -294,6 +294,7 @@ class LayoutPipeline(Pipeline):
 
                 self.model.eval()
                 metrics = LayoutMetrics()
+                val_outs = {}  # save the output for each model
 
                 for record in tqdm(
                     self.valid_dataset,
@@ -309,6 +310,8 @@ class LayoutPipeline(Pipeline):
                         outs.numpy(),
                         config_runtime.numpy(),
                     )
+
+                    val_outs[record["model_id"]] = outs.numpy()
 
                 prefix = "val/"
                 scores = metrics.compute_scores(prefix=prefix)
@@ -332,6 +335,12 @@ class LayoutPipeline(Pipeline):
                     if use_logger:
                         self.best_model_path = self._save_model(epoch, kendall)
                     not_improved = 0
+
+                    output_path = os.path.join(
+                        wandb.run.dir, f"val_outs_{epoch}.plk"
+                    )
+                    with open(output_path, "wb") as f:
+                        pickle.dump(val_outs, f)
                 else:
                     not_improved += 1
                     if early_stopping > 0 and not_improved == early_stopping:

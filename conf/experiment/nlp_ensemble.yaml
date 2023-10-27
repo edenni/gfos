@@ -10,10 +10,10 @@ defaults:
   - override /trainer: layout
 
 dataset:
-  source: xla
+  source: nlp
   search: random
   max_configs: 10240
-  num_configs: 128
+  num_configs: 256
 
 model:
   node_layer: SAGEConv
@@ -34,11 +34,11 @@ model:
 
 hydra:
   job:
-    name: xla_ensemble
+    name: nlp_ensemble
 
 logger:
   project: ${project}
-  group: xla_ensemble
+  group: nlp_ensemble
   name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline
@@ -48,10 +48,14 @@ logger:
 trainer:
   num_epochs: 2000
   num_val_epochs: 40
-  infer_bs: 100
-  early_stopping: 5
+  infer_bs: 200
+  early_stopping: 7
+
+optimizer:
+  lr: 1e-3
 
 scheduler:
-  patience: 2
+  patience: 4
+  min_lr: 1e-6
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

@@ -25,7 +25,7 @@ model:
   config_neighbor_dim: 32
 
   config_layer: SAGEConv
-  num_config_layers: 4
+  num_config_layers: 3
   config_dim: 32
   use_config_edge_weight: false
   use_config_edge_attr: false
@@ -33,6 +33,10 @@ model:
   head_dim: 64
   dropout: 0.2
   activation: LeakyReLU
+
+  node_dropout_between_layers: 0.1
+  config_dropout_between_layers: 0.1
+  config_neighbor_dropout_between_layers: 0.1
 
 hydra:
   job:
@@ -54,7 +58,7 @@ trainer:
   infer_bs: 100
   early_stopping: 7
   accum_iter: 4
-  grad_clip: 0.0
+  grad_clip: 0.1
 
 scheduler:
   patience: 3
