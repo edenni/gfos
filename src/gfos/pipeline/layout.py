@@ -389,9 +389,6 @@ class LayoutPipeline(Pipeline):
             config_runtime = record["config_runtime"]
             config_edge_index = record["config_edge_index"]
             config_edge_weight = record["config_edge_weight"]
-            # config_edge_path = record["config_edge_path"]
-            # config_edge_mask = record["config_edge_mask"]
-            # config_edge_path_len = record["config_edge_path_len"]
 
             (
                 node_feat,
