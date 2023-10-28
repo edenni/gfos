@@ -302,6 +302,11 @@ class LayoutPipeline(Pipeline):
                         if use_logger:
                             wandb.log(log_params)
                         loss_mean = 0
+
+                if isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                ):
+                    self.scheduler.step()
                 pbar.close()
 
                 # Validation phase
@@ -578,6 +583,11 @@ class LayoutPipeline(Pipeline):
                         if use_logger:
                             wandb.log(log_params)
                         loss_mean = 0
+
+                if isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                ):
+                    self.scheduler.step()
                 pbar.close()
 
                 # Validation phase
