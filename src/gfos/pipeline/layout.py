@@ -4,10 +4,11 @@ import pickle
 
 import numpy as np
 import torch
-import wandb
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
+
+import wandb
 
 from ..data.constants import CONFIG_RUNTIME_MEAN_STD
 from ..data.dataset import LayoutDataset, Normalizer
@@ -21,7 +22,9 @@ logger = logging.getLogger(__name__)
 class LayoutPipeline(Pipeline):
     pipeline_name = "layout"
 
-    def create_dataset(self, train: bool = True, test: bool = False):
+    def create_dataset(
+        self, train: bool = True, valid: bool = True, test: bool = False
+    ):
         if (
             getattr(self, "train_dataset", None) is not None
             and getattr(self, "valid_dataset", None) is not None
@@ -144,6 +147,58 @@ class LayoutPipeline(Pipeline):
             self.optimizer,
         )
 
+    def _train_one(
+        self,
+        record: dict,
+        batch_size: int,
+        device: torch.device,
+        accum_iter: int,
+    ):
+        node_feat = record["node_feat"]
+        node_opcode = record["node_opcode"]
+        edge_index = record["edge_index"]
+        node_config_feat = record["node_config_feat"]
+        node_config_ids = record["node_config_ids"]
+        config_runtime = record["config_runtime"]
+        config_edge_index = record["config_edge_index"]
+        config_edge_weight = record["config_edge_weight"]
+
+        (
+            node_feat,
+            node_opcode,
+            edge_index,
+            node_config_feat,
+            node_config_ids,
+            config_edge_index,
+            config_edge_weight,
+            config_runtime,
+        ) = (
+            node_feat.to(device),
+            node_opcode.to(device),
+            edge_index.to(device),
+            node_config_feat.to(device),
+            node_config_ids.to(device),
+            config_edge_index.to(device),
+            config_edge_weight.to(device),
+            config_runtime.to(device),
+        )
+
+        out = self.model(
+            node_feat,
+            node_opcode,
+            edge_index,
+            node_config_feat,
+            node_config_ids,
+            config_edge_index,
+            config_edge_weight,
+        )
+
+        loss = self.criterion(out, config_runtime)
+        loss = loss / accum_iter
+        loss.backward()
+
+        return loss
+
     def train(self):
         self.create_dataset(test="test" in self.cfg.tasks)
         self._setup_model()
@@ -221,53 +276,14 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    node_feat = record["node_feat"]
-                    node_opcode = record["node_opcode"]
-                    edge_index = record["edge_index"]
-                    node_config_feat = record["node_config_feat"]
-                    node_config_ids = record["node_config_ids"]
-                    config_runtime = record["config_runtime"]
-                    config_edge_index = record["config_edge_index"]
-                    config_edge_weight = record["config_edge_weight"]
-                    # config_edge_path = record["config_edge_path"]
-
-                    (
-                        node_feat,
-                        node_opcode,
-                        edge_index,
-                        node_config_feat,
-                        node_config_ids,
-                        config_edge_index,
-                        config_edge_weight,
-                        config_runtime,
-                    ) = (
-                        node_feat.to(device),
-                        node_opcode.to(device),
-                        edge_index.to(device),
-                        node_config_feat.to(device),
-                        node_config_ids.to(device),
-                        config_edge_index.to(device),
-                        config_edge_weight.to(device),
-                        config_runtime.to(device),
+                    loss = self._train_one(
+                        record, infer_bs, device, accum_iter
                     )
-
-                    out = self.model(
-                        node_feat,
-                        node_opcode,
-                        edge_index,
-                        node_config_feat,
-                        node_config_ids,
-                        config_edge_index,
-                        config_edge_weight,
-                    )
-
-                    loss = self.criterion(out, config_runtime)
-                    loss = loss / accum_iter
                     loss_mean += loss.item()
-                    loss.backward()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
 
+                    # Backward
                     if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
                         i + 1 == len(self.train_dataset)
                     ):
@@ -493,3 +509,122 @@ class LayoutPipeline(Pipeline):
             project=self.cfg.logger.project,
             count=100,
         )
+
+    def train_wo_val(self):
+        self.create_dataset(valid=False, test="test" in self.cfg.tasks)
+        self._setup_model()
+
+        use_logger: bool = self.cfg.get("logger") is not None
+        if use_logger:
+            run = wandb.init(
+                project=self.cfg.logger.project,
+                config=OmegaConf.to_container(
+                    self.cfg, resolve=True, throw_on_missing=True
+                ),
+                dir=self.cfg.paths.output_dir,
+                group=self.cfg.logger.group,
+                name=self.cfg.logger.name,
+                tags=self.cfg.logger.tags,
+            )
+
+            run.watch(self.model, log="all")
+            run.log_code("./src/gfos")
+
+        # Training configs
+        device = self.device
+        num_epochs = self.cfg.trainer.num_epochs
+        num_val_epochs = self.cfg.trainer.num_val_epochs
+        infer_bs = self.cfg.trainer.infer_bs
+        accum_iter = self.cfg.trainer.accum_iter
+        grad_clip = self.cfg.trainer.grad_clip
+
+        loss_mean = 0
+
+        # Catch keyboard interrupt, infer on test set, and exit
+        try:
+            for epoch in range(num_epochs):
+                # Shuffle the training dataset
+                permutation = np.random.permutation(len(self.train_dataset))
+
+                # Training phase
+                self.model.train()
+                pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
+
+                for i in pbar:
+                    record = self.train_dataset[i]
+                    loss = self._train_one(
+                        record, infer_bs, device, accum_iter
+                    )
+                    loss_mean += loss.item()
+
+                    pbar.set_postfix_str(f"loss: {loss:.4f}")
+
+                    # Backward
+                    if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
+                        i + 1 == len(self.train_dataset)
+                    ):
+                        if grad_clip > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.model.parameters(), grad_clip
+                            )
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+
+                        log_params = {
+                            "epoch": epoch,
+                            "train/lr": self.optimizer.param_groups[0]["lr"],
+                            "train/loss": loss_mean,
+                        }
+                        if use_logger:
+                            wandb.log(log_params)
+                        loss_mean = 0
+                pbar.close()
+
+                # Validation phase
+                if (
+                    epoch + 1
+                ) % num_val_epochs != 0 and epoch != num_epochs - 1:
+                    continue
+
+                self.model.eval()
+                metrics = LayoutMetrics()
+
+                for record in tqdm(
+                    self.train_dataset,
+                    desc=f"Valid epoch: {epoch}",
+                    leave=False,
+                ):
+                    config_runtime: torch.Tensor = record["config_runtime"]
+                    outs: torch.Tensor = self._predict_one(
+                        record, infer_bs, device
+                    )
+                    metrics.add(
+                        record["model_id"],
+                        outs.numpy(),
+                        config_runtime.numpy(),
+                    )
+
+                prefix = "val/"
+                scores = metrics.compute_scores(prefix=prefix)
+
+                kendall = scores[f"{prefix}index_kendall"]
+                if isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
+                    self.scheduler.step(kendall)
+
+                if use_logger:
+                    wandb.log({f"{prefix}index_kendall": kendall})
+
+                # Save the model
+                if use_logger:
+                    self.best_model_path = self._save_model(epoch, kendall)
+
+        except KeyboardInterrupt:
+            pass
+
+        if use_logger:
+            self._save_model(epoch, kendall, suffix="_last")
+
+        if "test" not in self.cfg.tasks:
+            wandb.finish()
