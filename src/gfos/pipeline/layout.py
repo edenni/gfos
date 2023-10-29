@@ -339,10 +339,10 @@ class LayoutPipeline(Pipeline):
                 prefix = "val/"
                 scores = metrics.compute_scores(prefix=prefix)
 
+                kendall = scores[f"{prefix}index_kendall"]
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
-                    kendall = scores[f"{prefix}index_kendall"]
                     self.scheduler.step(kendall)
 
                 if use_logger:
