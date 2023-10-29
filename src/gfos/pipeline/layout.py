@@ -4,11 +4,10 @@ import pickle
 
 import numpy as np
 import torch
+import wandb
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
-import wandb
 
 from ..data.constants import CONFIG_RUNTIME_MEAN_STD
 from ..data.dataset import LayoutDataset, Normalizer
@@ -318,10 +317,10 @@ class LayoutPipeline(Pipeline):
                 prefix = "val/"
                 scores = metrics.compute_scores(prefix=prefix)
 
+                kendall = scores[f"{prefix}index_kendall"]
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
-                    kendall = scores[f"{prefix}index_kendall"]
                     self.scheduler.step(kendall)
 
                 if use_logger:
