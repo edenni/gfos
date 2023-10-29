@@ -8,6 +8,7 @@ import wandb
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from torch_geometric.data import Batch
 
 from ..data.constants import CONFIG_RUNTIME_MEAN_STD
 from ..data.dataset import LayoutDataset, Normalizer
@@ -140,18 +141,17 @@ class LayoutPipeline(Pipeline):
 
     def _train_one(
         self,
-        record: dict,
+        batch: dict,
         device: torch.device,
         accum_iter: int,
     ):
-        node_feat = record["node_feat"]
-        node_opcode = record["node_opcode"]
-        edge_index = record["edge_index"]
-        node_config_feat = record["node_config_feat"]
-        node_config_ids = record["node_config_ids"]
-        config_runtime = record["config_runtime"]
-        config_edge_index = record["config_edge_index"]
-        config_edge_weight = record["config_edge_weight"]
+        node_feat = batch["node_feat"]
+        node_opcode = batch["node_opcode"]
+        edge_index = batch["edge_index"]
+        node_config_feat = batch["node_config_feat"]
+        node_config_ids = batch["node_config_ids"]
+        config_runtime = batch["config_runtime"]
+        config_edge_index = batch["config_edge_index"]
 
         (
             node_feat,
@@ -160,7 +160,6 @@ class LayoutPipeline(Pipeline):
             node_config_feat,
             node_config_ids,
             config_edge_index,
-            config_edge_weight,
             config_runtime,
         ) = (
             node_feat.to(device),
@@ -169,7 +168,6 @@ class LayoutPipeline(Pipeline):
             node_config_feat.to(device),
             node_config_ids.to(device),
             config_edge_index.to(device),
-            config_edge_weight.to(device),
             config_runtime.to(device),
         )
 
@@ -180,8 +178,9 @@ class LayoutPipeline(Pipeline):
             node_config_feat,
             node_config_ids,
             config_edge_index,
-            config_edge_weight,
         )
+
+        print(out.shape, config_runtime.shape)
 
         loss = self.criterion(out, config_runtime)
         loss = loss / accum_iter
@@ -243,6 +242,7 @@ class LayoutPipeline(Pipeline):
         accum_iter = self.cfg.trainer.accum_iter
         grad_clip = self.cfg.trainer.grad_clip
         early_stopping = self.cfg.trainer.early_stopping
+        batch_size = self.cfg.trainer.batch_size
 
         best_score = -1
         loss_mean = 0
@@ -256,11 +256,20 @@ class LayoutPipeline(Pipeline):
 
                 # Training phase
                 self.model.train()
-                pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
+                pbar = tqdm(
+                    range(0, len(permutation), batch_size),
+                    leave=False,
+                    desc=f"Epoch: {epoch}",
+                )
 
                 for i in pbar:
-                    record = self.train_dataset[i]
-                    loss = self._train_one(record, device, accum_iter)
+                    end_i = min(i + batch_size, len(permutation))
+                    data_indices = permutation[i:end_i]
+                    batch = Batch.from_data_list(
+                        [self.train_dataset[idx] for idx in data_indices]
+                    )
+
+                    loss = self._train_one(batch, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")

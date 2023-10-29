@@ -11,6 +11,24 @@ from tqdm import tqdm
 from gfos.data.graph import get_config_graph
 
 
+class LayoutData(Data):
+    def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if "index" in key or "ids" in key:
+            return self.num_nodes
+        else:
+            return 0
+
+    def __cat_dim__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if "index" in key or "node_config_feat" == key:
+            return 1
+        elif (
+            "node_opcode" in key or "node_config_ids" in key or "config_runtime" in key
+        ):
+            return -1
+        else:
+            return 0
+
+
 @dataclass
 class Normalizer:
     node_feat_mask: torch.Tensor
@@ -256,21 +274,19 @@ class LayoutDataset(Dataset):
 
         sample = dict(
             model_id=model_id,
-            x=node_feat,
+            node_feat=node_feat,
             node_opcode=node_opcode,
             edge_index=edge_index,
             node_config_feat=node_config_feat,
             node_config_ids=node_config_ids,
-            config_runtime=config_runtime,
             config_edge_index=config_edge_index,
-            config_edge_weight=config_edge_weight,
-            config_edge_path=config_edge_path,
+            config_runtime=config_runtime,
         )
 
         if "cls_label" in record:
             sample["cls_label"] = record["cls_label"][config_indices]
 
-        return Data(**sample)
+        return LayoutData(**sample)
 
 
 def sample_configs(config_runtime: np.array, max_configs: int) -> (np.array, np.array):
