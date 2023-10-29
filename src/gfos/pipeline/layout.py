@@ -46,15 +46,11 @@ class LayoutPipeline(Pipeline):
 
         # Check if layout directory exists
         if not os.path.exists(layout_dir):
-            raise FileNotFoundError(
-                f"Layout directory {layout_dir} does not exist"
-            )
+            raise FileNotFoundError(f"Layout directory {layout_dir} does not exist")
 
         # Check if normalizer exists
         if normalizer_path and not os.path.exists(normalizer_path):
-            raise FileNotFoundError(
-                f"Normalizer {normalizer_path} does not exist"
-            )
+            raise FileNotFoundError(f"Normalizer {normalizer_path} does not exist")
 
         # Load layout files
         logger.info(f"Loading {source} {search} layouts from {layout_dir}")
@@ -63,9 +59,7 @@ class LayoutPipeline(Pipeline):
         )
 
         # Load normalizer
-        normalizer = Normalizer.from_json(
-            normalizer_path, source=source, search=search
-        )
+        normalizer = Normalizer.from_json(normalizer_path, source=source, search=search)
         runtime_mean = CONFIG_RUNTIME_MEAN_STD[source][search]["mean"]
         runtime_std = CONFIG_RUNTIME_MEAN_STD[source][search]["std"]
 
@@ -79,9 +73,7 @@ class LayoutPipeline(Pipeline):
             logger.info(f"Loading indices from {fold_dir}")
 
             if indices_dir is None or not os.path.exists(fold_dir):
-                raise FileNotFoundError(
-                    f"Indices directory {fold_dir} not found"
-                )
+                raise FileNotFoundError(f"Indices directory {fold_dir} not found")
 
             # Pass all files to Dataset and filter files inside __init__
             train_files = layout_files["train"] + layout_files["valid"]
@@ -150,7 +142,6 @@ class LayoutPipeline(Pipeline):
     def _train_one(
         self,
         record: dict,
-        batch_size: int,
         device: torch.device,
         accum_iter: int,
     ):
@@ -215,17 +206,13 @@ class LayoutPipeline(Pipeline):
 
             if self.cfg.get("sweep") is not None:
                 self.cfg.model.num_node_layers = wandb.config.num_node_layers
-                self.cfg.model.num_config_layers = (
-                    wandb.config.num_config_layers
-                )
+                self.cfg.model.num_config_layers = wandb.config.num_config_layers
                 self.cfg.model.num_config_neighbor_layers = (
                     wandb.config.num_config_neighbor_layers
                 )
                 self.cfg.model.node_dim = wandb.config.node_dim
                 self.cfg.model.config_dim = wandb.config.config_dim
-                self.cfg.model.config_neighbor_dim = (
-                    wandb.config.config_neighbor_dim
-                )
+                self.cfg.model.config_neighbor_dim = wandb.config.config_neighbor_dim
 
                 self.cfg.model.node_dropout_between_layers = (
                     wandb.config.node_dropout_between_layers
@@ -243,9 +230,7 @@ class LayoutPipeline(Pipeline):
                 self.cfg.optimizer.weight_decay = wandb.config.weight_decay
 
             wandb.config.update(
-                OmegaConf.to_container(
-                    self.cfg, resolve=True, throw_on_missing=True
-                )
+                OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True)
             )
 
             run.watch(self.model, log="all")
@@ -276,9 +261,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
@@ -310,9 +293,7 @@ class LayoutPipeline(Pipeline):
                 pbar.close()
 
                 # Validation phase
-                if (
-                    epoch + 1
-                ) % num_val_epochs != 0 and epoch != num_epochs - 1:
+                if (epoch + 1) % num_val_epochs != 0 and epoch != num_epochs - 1:
                     continue
 
                 self.model.eval()
@@ -325,9 +306,7 @@ class LayoutPipeline(Pipeline):
                     leave=False,
                 ):
                     config_runtime: torch.Tensor = record["config_runtime"]
-                    outs: torch.Tensor = self._predict_one(
-                        record, infer_bs, device
-                    )
+                    outs: torch.Tensor = self._predict_one(record, infer_bs, device)
                     metrics.add(
                         record["model_id"],
                         outs.numpy(),
@@ -351,17 +330,12 @@ class LayoutPipeline(Pipeline):
                 # Update best scores and save the model
                 if kendall > best_score:
                     best_score = kendall
-                    print(
-                        "Best score updated "
-                        f"at epoch {epoch}: {best_score:.4f}"
-                    )
+                    print("Best score updated " f"at epoch {epoch}: {best_score:.4f}")
                     if use_logger:
                         self.best_model_path = self._save_model(epoch, kendall)
                     not_improved = 0
 
-                    output_path = os.path.join(
-                        wandb.run.dir, f"val_outs_{epoch}.plk"
-                    )
+                    output_path = os.path.join(wandb.run.dir, f"val_outs_{epoch}.plk")
                     with open(output_path, "wb") as f:
                         pickle.dump(val_outs, f)
                 else:
@@ -557,9 +531,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, infer_bs, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
@@ -591,9 +563,7 @@ class LayoutPipeline(Pipeline):
                 pbar.close()
 
                 # Validation phase
-                if (
-                    epoch + 1
-                ) % num_val_epochs != 0 and epoch != num_epochs - 1:
+                if (epoch + 1) % num_val_epochs != 0 and epoch != num_epochs - 1:
                     continue
 
                 self.model.eval()
@@ -605,9 +575,7 @@ class LayoutPipeline(Pipeline):
                     leave=False,
                 ):
                     config_runtime: torch.Tensor = record["config_runtime"]
-                    outs: torch.Tensor = self._predict_one(
-                        record, infer_bs, device
-                    )
+                    outs: torch.Tensor = self._predict_one(record, infer_bs, device)
                     metrics.add(
                         record["model_id"],
                         outs.numpy(),

@@ -23,9 +23,7 @@ class LayoutModel(torch.nn.Module):
         node_dim: int = 64,
         node_dropout_between_layers: float = 0.0,
         node_conv_kwargs: dict = {},
-        config_neighbor_layer: Literal[
-            "GATConv", "GCNConv", "SAGEConv"
-        ] = "SAGEConv",
+        config_neighbor_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_config_neighbor_layers: int = 2,
         config_neighbor_dim: int = 64,
         config_neighbor_dropout_between_layers: float = 0.0,
@@ -147,18 +145,12 @@ class LayoutModel(torch.nn.Module):
         Returns:
             nn.Module: a sequential layer with convolution and activation
         """
-        assert (
-            num_layers > 1
-        ), f"num_layers must be greater than 1 but got {num_layers}"
+        assert num_layers > 1, f"num_layers must be greater than 1 but got {num_layers}"
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
 
-        channels = (
-            [in_channels]
-            + [hidden_channels] * (num_layers - 1)
-            + [out_channels]
-        )
+        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
 
         if conv_kwargs:
             logger.info(f"Set kwargs: {conv_kwargs} for {conv_layer}")
@@ -167,9 +159,7 @@ class LayoutModel(torch.nn.Module):
         if dropout > 0:
             conv_layers.append((nn.Dropout(p=dropout), "x0 -> x0"))
 
-        for i, (in_plane, out_plane) in enumerate(
-            zip(channels[:-1], channels[1:])
-        ):
+        for i, (in_plane, out_plane) in enumerate(zip(channels[:-1], channels[1:])):
             # Not added at the start of the module
             if inner_dropout > 0 and len(conv_layers) > 0:
                 if not (
@@ -177,9 +167,7 @@ class LayoutModel(torch.nn.Module):
                     and len(conv_layers[-1]) > 0
                     and isinstance(conv_layers[-1][0], nn.Dropout)
                 ):
-                    conv_layers.append(
-                        (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}")
-                    )
+                    conv_layers.append((nn.Dropout(p=inner_dropout), f"x{i} -> x{i}"))
             conv_layers.extend(
                 [
                     (
@@ -206,9 +194,7 @@ class LayoutModel(torch.nn.Module):
             )
 
         return geonn.Sequential(
-            "x0, edge_index, edge_weight"
-            if use_edge_weight
-            else "x0, edge_index",
+            "x0, edge_index, edge_weight" if use_edge_weight else "x0, edge_index",
             conv_layers,
         )
 
@@ -220,10 +206,6 @@ class LayoutModel(torch.nn.Module):
         node_config_feat: torch.Tensor,
         node_config_ids: torch.Tensor,
         config_edge_index: torch.Tensor = None,
-        config_edge_weight: torch.Tensor = None,
-        # config_edge_mask: torch.Tensor = None,
-        # config_edge_path_len: torch.Tensor = None,
-        # config_edge_path: list[list[int]] = None,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
 
@@ -232,25 +214,9 @@ class LayoutModel(torch.nn.Module):
         # (N, in_channels) -> (N, node_dim)
         x = self.node_gnn(x, edge_index)
 
-        # # if self.use_attr:
-        #     # config_edge_attr = torch.stack(
-        #     #     [x[path].mean(dim=0) for path in config_edge_path]
-        #     # )
-        #     # config_edge_attr = self.reduce_node_to_edge(x, config_paths)
-        #     # config_edge_attr = (
-        #     #     x.expand_as(config_edge_mask) * config_edge_mask
-        #     # ).sum(dim=1) / config_edge_path_len
-        #     config_edge_attr = self.node2edge(
-        #         config_edge_attr
-        #     )  # (NC, edge_dim)
-        # else:
-        #     config_edge_attr = None
-
         # (N, node_dim) -> (NC, node_dim)
         config_neighbors = aggregate_neighbors(x, edge_index)[node_config_ids]
-        config_neighbors = self.config_neighbor_gnn(
-            config_neighbors, config_edge_index
-        )
+        config_neighbors = self.config_neighbor_gnn(config_neighbors, config_edge_index)
 
         # (N, node_dim) -> (NC, node_dim)
         x = x[node_config_ids]
@@ -273,19 +239,12 @@ class LayoutModel(torch.nn.Module):
             Data(
                 x=x[i],
                 edge_index=config_edge_index,
-                # edge_weight=config_edge_weight,
-                # edge_attr=config_edge_attr,
             )
             for i in range(x.shape[0])
         ]
         batch = Batch.from_data_list(datas)
 
         # # (C, NC, merged_node_dim) -> (C, NC, config_dim)
-        # if self.use_attr:
-        #     x = self.config_gnn(batch.x, batch.edge_index, batch.edge_attr)
-        # elif self.use_weight:
-        # x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
-        # else:
         x = self.config_gnn(batch.x, batch.edge_index)
 
         # (C, NC, config_dim) -> (C, config_dim)

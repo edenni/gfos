@@ -5,6 +5,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 from tqdm import tqdm
 
 from gfos.data.graph import get_config_graph
@@ -50,15 +51,13 @@ class Normalizer:
                 f"Invalid source or search: source={source}, search={search}"
             )
         else:
-            node_feat_mask = torch.tensor(
-                data["node_feat_mask"], dtype=torch.bool
-            )
-            node_feat_min = torch.tensor(
-                data["node_feat_min"], dtype=torch.float
-            )[node_feat_mask]
-            node_feat_max = torch.tensor(
-                data["node_feat_max"], dtype=torch.float
-            )[node_feat_mask]
+            node_feat_mask = torch.tensor(data["node_feat_mask"], dtype=torch.bool)
+            node_feat_min = torch.tensor(data["node_feat_min"], dtype=torch.float)[
+                node_feat_mask
+            ]
+            node_feat_max = torch.tensor(data["node_feat_max"], dtype=torch.float)[
+                node_feat_mask
+            ]
             node_config_feat_mask = torch.tensor(
                 data["node_config_feat_mask"], dtype=torch.bool
             )
@@ -108,8 +107,7 @@ class LayoutDataset(Dataset):
         if indices_dir is not None:
             if not Path(indices_dir).exists():
                 raise FileNotFoundError(
-                    f"Fold index dir <{indices_dir}> "
-                    "specified but does not exist"
+                    f"Fold index dir <{indices_dir}> " "specified but does not exist"
                 )
             indices_dir = Path(indices_dir)
             target_models = set([f.stem for f in indices_dir.glob("*.npy")])
@@ -119,15 +117,6 @@ class LayoutDataset(Dataset):
 
         self.data = []
         pbar = tqdm(self.files, desc="Loading data")
-
-        # Load all runtime and calculate mean and std
-        # all_runtime = []
-        # for file in self.files:
-        #     record = dict(np.load(file))
-        #     all_runtime.append(record["config_runtime"])
-        # all_runtime = np.concatenate(all_runtime)
-        # mu = all_runtime.mean()
-        # std = all_runtime.std()
 
         for file in pbar:
             record = dict(np.load(file))
@@ -165,9 +154,7 @@ class LayoutDataset(Dataset):
                     config_indices = torch.arange(len(runtime))
 
             record["config_runtime"] = runtime_sampled
-            record["node_config_feat"] = record["node_config_feat"][
-                config_indices
-            ]
+            record["node_config_feat"] = record["node_config_feat"][config_indices]
             record["argsort_runtime"] = np.argsort(runtime_sampled)
 
             if bins is not None:
@@ -178,9 +165,7 @@ class LayoutDataset(Dataset):
                 record["edge_index"],
                 record["node_config_ids"],
             )
-            record["config_edge_weight"] = torch.tensor(
-                edge_weight, dtype=torch.float
-            )
+            record["config_edge_weight"] = torch.tensor(edge_weight, dtype=torch.float)
             record["config_edge_path"] = paths
 
             config_edge_index = torch.tensor(
@@ -195,9 +180,7 @@ class LayoutDataset(Dataset):
             record["argsort_runtime"] = torch.tensor(
                 record["argsort_runtime"], dtype=torch.long
             )
-            record["node_feat"] = torch.tensor(
-                record["node_feat"], dtype=torch.float
-            )
+            record["node_feat"] = torch.tensor(record["node_feat"], dtype=torch.float)
             record["node_opcode"] = torch.tensor(
                 record["node_opcode"], dtype=torch.long
             )
@@ -215,9 +198,7 @@ class LayoutDataset(Dataset):
                 record["node_feat"] = self.normalizer.normalize_node_feat(
                     record["node_feat"]
                 )
-                record[
-                    "node_config_feat"
-                ] = self.normalizer.normalize_node_config_feat(
+                record["node_config_feat"] = self.normalizer.normalize_node_config_feat(
                     record["node_config_feat"]
                 )
 
@@ -261,8 +242,7 @@ class LayoutDataset(Dataset):
             # ]
             idx = torch.topk(
                 # Sample wrt GumbulSoftmax([NumConfs, NumConfs-1, ..., 1])
-                (c - torch.arange(c)) / c
-                - torch.log(-torch.log(torch.rand(c))),
+                (c - torch.arange(c)) / c - torch.log(-torch.log(torch.rand(c))),
                 num_configs,
             )[1]
             config_indices = argsort_runtime[idx]
@@ -276,7 +256,7 @@ class LayoutDataset(Dataset):
 
         sample = dict(
             model_id=model_id,
-            node_feat=node_feat,
+            x=node_feat,
             node_opcode=node_opcode,
             edge_index=edge_index,
             node_config_feat=node_config_feat,
@@ -284,20 +264,16 @@ class LayoutDataset(Dataset):
             config_runtime=config_runtime,
             config_edge_index=config_edge_index,
             config_edge_weight=config_edge_weight,
-            # config_edge_mask=config_edge_mask,
-            # config_edge_path_len=config_edge_path_len,
             config_edge_path=config_edge_path,
         )
 
         if "cls_label" in record:
             sample["cls_label"] = record["cls_label"][config_indices]
 
-        return sample
+        return Data(**sample)
 
 
-def sample_configs(
-    config_runtime: np.array, max_configs: int
-) -> (np.array, np.array):
+def sample_configs(config_runtime: np.array, max_configs: int) -> (np.array, np.array):
     """Sample 1/3 max_configs of best configs and 1/3 of worst configs,
     and the rest randomly. Return the sampled configs and indices.
     """
