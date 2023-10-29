@@ -150,7 +150,6 @@ class LayoutPipeline(Pipeline):
     def _train_one(
         self,
         record: dict,
-        batch_size: int,
         device: torch.device,
         accum_iter: int,
     ):
@@ -276,9 +275,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
@@ -557,9 +554,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
