@@ -3,7 +3,7 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: step
+  - override /scheduler: plateau
   - override /loss: multi_element_rank
   - override /logger: wandb
   - override /dataset: layout
@@ -34,29 +34,24 @@ model:
 
 hydra:
   job:
-    name: ${run_name}
+    name: xla_ensemble
 
 logger:
   project: ${project}
-  group: 
-  name: ${run_name}_cosine
+  group: xla_ensemble
+  name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
-optimizer:
-  lr: 5e-3
-  weight_decay: 1e-7
+trainer:
+  num_epochs: 2000
+  num_val_epochs: 40
+  infer_bs: 100
+  early_stopping: 5
 
 scheduler:
-  step_size: 400
-  gamma: 0.1
-
-trainer:
-  num_epochs: 1200
-  num_val_epochs: 40
-  infer_bs: 200
-  early_stopping: -1
+  patience: 2
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

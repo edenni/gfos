@@ -300,8 +300,8 @@ class LayoutPipeline(Pipeline):
                             wandb.log(log_params)
                         loss_mean = 0
 
-                if isinstance(
-                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                if not isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
                     self.scheduler.step()
                 pbar.close()
@@ -512,7 +512,7 @@ class LayoutPipeline(Pipeline):
             count=100,
         )
 
-    def train_wo_val(self):
+    def train_with_val(self):
         self.create_dataset(valid=False, test="test" in self.cfg.tasks)
         self._setup_model()
 
@@ -579,8 +579,8 @@ class LayoutPipeline(Pipeline):
                             wandb.log(log_params)
                         loss_mean = 0
 
-                if isinstance(
-                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                if not isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
                     self.scheduler.step()
                 pbar.close()
