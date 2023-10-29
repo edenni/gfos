@@ -3,7 +3,7 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: step
+  - override /scheduler: cosine
   - override /loss: multi_element_rank
   - override /logger: wandb
   - override /dataset: layout
@@ -50,8 +50,8 @@ optimizer:
   weight_decay: 1e-7
 
 scheduler:
-  step_size: 400
-  gamma: 0.1
+  T_max: 500
+  eta_min: 1e-7
 
 trainer:
   num_epochs: 1200
