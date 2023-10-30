@@ -156,6 +156,7 @@ cython_debug/
 input/**
 output/**
 data/**
+!data/normalizer.json
 
 # Logs
 logs/**
