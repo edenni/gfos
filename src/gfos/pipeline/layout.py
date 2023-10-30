@@ -150,7 +150,6 @@ class LayoutPipeline(Pipeline):
     def _train_one(
         self,
         record: dict,
-        batch_size: int,
         device: torch.device,
         accum_iter: int,
     ):
@@ -276,9 +275,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
@@ -303,8 +300,8 @@ class LayoutPipeline(Pipeline):
                             wandb.log(log_params)
                         loss_mean = 0
 
-                if isinstance(
-                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                if not isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
                     self.scheduler.step()
                 pbar.close()
@@ -339,10 +336,10 @@ class LayoutPipeline(Pipeline):
                 prefix = "val/"
                 scores = metrics.compute_scores(prefix=prefix)
 
+                kendall = scores[f"{prefix}index_kendall"]
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
-                    kendall = scores[f"{prefix}index_kendall"]
                     self.scheduler.step(kendall)
 
                 if use_logger:
@@ -515,7 +512,7 @@ class LayoutPipeline(Pipeline):
             count=100,
         )
 
-    def train_wo_val(self):
+    def train_with_val(self):
         self.create_dataset(valid=False, test="test" in self.cfg.tasks)
         self._setup_model()
 
@@ -557,9 +554,7 @@ class LayoutPipeline(Pipeline):
 
                 for i in pbar:
                     record = self.train_dataset[i]
-                    loss = self._train_one(
-                        record, infer_bs, device, accum_iter
-                    )
+                    loss = self._train_one(record, device, accum_iter)
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")
@@ -584,8 +579,8 @@ class LayoutPipeline(Pipeline):
                             wandb.log(log_params)
                         loss_mean = 0
 
-                if isinstance(
-                    self.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR
+                if not isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
                     self.scheduler.step()
                 pbar.close()

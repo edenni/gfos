@@ -1,0 +1,60 @@
+# @package _global_
+
+defaults:
+  - override /model: layout
+  - override /optimizer: adamw
+  - override /scheduler: cosine
+  - override /loss: multi_element_rank
+  - override /logger: wandb
+  - override /dataset: layout
+  - override /trainer: layout
+
+dataset:
+  source: nlp
+  search: random
+  max_configs: 10240
+  num_configs: 256
+
+model:
+  node_layer: SAGEConv
+  num_node_layers: 4
+  node_dim: 64
+
+  config_neighbor_layer: GATConv
+  num_config_neighbor_layers: 2
+  config_neighbor_dim: 64
+
+  config_layer: SAGEConv
+  num_config_layers: 4
+  config_dim: 64
+
+  head_dim: 64
+  dropout: 0.2
+  activation: LeakyReLU
+
+hydra:
+  job:
+    name: ${run_name}
+
+logger:
+  project: ${project}
+  group: 
+  name: ${run_name}_cosine
+  tags:
+    - pipeline
+    - ${dataset.source}
+    - ${dataset.search}
+
+trainer:
+  num_epochs: 1500
+  num_val_epochs: 40
+  infer_bs: 400
+  early_stopping: 8
+
+optimizer:
+  lr: 1e-3
+
+scheduler:
+  eta_min: 1e-7
+
+tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
