@@ -136,7 +136,6 @@ class LayoutPipeline(Pipeline):
         self.criterion = instantiate(self.cfg.loss)
 
         # Optimizer
-        # TODO: add support for multiple learning rate
         self.optimizer = instantiate(
             self.cfg.optimizer,
             self.model.parameters(),
