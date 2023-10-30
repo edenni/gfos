@@ -160,7 +160,6 @@ class LayoutPipeline(Pipeline):
         node_config_ids = record["node_config_ids"]
         config_runtime = record["config_runtime"]
         config_edge_index = record["config_edge_index"]
-        config_edge_weight = record["config_edge_weight"]
 
         (
             node_feat,
@@ -169,7 +168,6 @@ class LayoutPipeline(Pipeline):
             node_config_feat,
             node_config_ids,
             config_edge_index,
-            config_edge_weight,
             config_runtime,
         ) = (
             node_feat.to(device),
@@ -178,7 +176,6 @@ class LayoutPipeline(Pipeline):
             node_config_feat.to(device),
             node_config_ids.to(device),
             config_edge_index.to(device),
-            config_edge_weight.to(device),
             config_runtime.to(device),
         )
 
@@ -189,7 +186,6 @@ class LayoutPipeline(Pipeline):
             node_config_feat,
             node_config_ids,
             config_edge_index,
-            config_edge_weight,
         )
 
         loss = self.criterion(out, config_runtime)
@@ -406,7 +402,6 @@ class LayoutPipeline(Pipeline):
             node_config_ids = record["node_config_ids"]
             config_runtime = record["config_runtime"]
             config_edge_index = record["config_edge_index"]
-            config_edge_weight = record["config_edge_weight"]
 
             (
                 node_feat,
@@ -415,9 +410,6 @@ class LayoutPipeline(Pipeline):
                 node_config_feat,
                 node_config_ids,
                 config_edge_index,
-                config_edge_weight,
-                # config_edge_mask,
-                # config_edge_path_len,
             ) = (
                 node_feat.to(device),
                 node_opcode.to(device),
@@ -425,9 +417,6 @@ class LayoutPipeline(Pipeline):
                 node_config_feat.to(device),
                 node_config_ids.to(device),
                 config_edge_index.to(device),
-                config_edge_weight.to(device),
-                # config_edge_mask.to(device),
-                # config_edge_path_len.to(device),
             )
 
             c = len(config_runtime)
@@ -442,10 +431,6 @@ class LayoutPipeline(Pipeline):
                     node_config_feat[i:end_i],
                     node_config_ids,
                     config_edge_index,
-                    config_edge_weight,
-                    # config_edge_path,
-                    # config_edge_mask,
-                    # config_edge_path_len,
                 )
                 outs.append(out.detach().cpu())
             return torch.concat(outs)
