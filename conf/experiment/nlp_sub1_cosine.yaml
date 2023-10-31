@@ -46,7 +46,7 @@ logger:
     - ${dataset.search}
 
 trainer:
-  num_epochs: 1500
+  num_epochs: 2000
   num_val_epochs: 40
   infer_bs: 400
   early_stopping: 8

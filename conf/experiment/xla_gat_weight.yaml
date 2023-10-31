@@ -3,7 +3,7 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: cosine
+  - override /scheduler: step
   - override /loss: multi_element_rank
   - override /logger: wandb
   - override /dataset: layout
@@ -11,22 +11,27 @@ defaults:
 
 dataset:
   source: xla
-  search: default
+  search: random
   max_configs: 10240
-  num_configs: 128
+  num_configs: 64
 
 model:
   node_layer: SAGEConv
   num_node_layers: 4
   node_dim: 64
 
-  config_neighbor_layer: GATConv
+  config_neighbor_layer: GATv2Conv
   num_config_neighbor_layers: 2
   config_neighbor_dim: 64
+  return_attention_weights: True
+  config_neighbor_conv_kwargs:
+    add_self_loops: False
 
-  config_layer: SAGEConv
-  num_config_layers: 3
+  config_layer: GraphConv
+  num_config_layers: 4
   config_dim: 64
+  config_conv_kwargs:
+    aggr: mean
 
   head_dim: 64
   dropout: 0.2
@@ -39,24 +44,20 @@ hydra:
 logger:
   project: ${project}
   group: 
-  name: ${run_name}_cosine
+  name: ${run_name}_gatv2_weight
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
-optimizer:
-  lr: 1e-3
-  weight_decay: 1e-7
+trainer:
+  num_epochs: 1200
+  num_val_epochs: 40
+  infer_bs: 20
+  early_stopping: 5
+  grad_clip: -1
 
 scheduler:
-  eta_min: 1e-6
-
-trainer:
-  num_epochs: 500
-  num_val_epochs: 40
-  infer_bs: 100
-  early_stopping: -1
-  grad_clip: 1e-1
+  step_size: 600
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
