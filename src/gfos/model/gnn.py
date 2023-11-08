@@ -29,11 +29,7 @@ class GAT(torch.nn.Module):
         conv = geonn.GATv2Conv if v2 else geonn.GATConv
         self.dropout = dropout
 
-        channels = (
-            [in_channels]
-            + [hidden_channels] * (num_layers - 1)
-            + [out_channels]
-        )
+        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
 
         self.conv_layers = nn.ModuleList()
 
@@ -42,9 +38,7 @@ class GAT(torch.nn.Module):
 
     def forward(self, x, edge_index):
         if self.dropout > 0:
-            x = nn.functional.dropout(
-                x, p=self.dropout, training=self.training
-            )
+            x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         for conv_layer in self.conv_layers:
             x, (edge_index, edge_weight) = conv_layer(
@@ -67,9 +61,7 @@ class LayoutModel(torch.nn.Module):
         node_dim: int = 64,
         node_dropout_between_layers: float = 0.0,
         node_conv_kwargs: dict = {},
-        config_neighbor_layer: Literal[
-            "GATConv", "GCNConv", "SAGEConv"
-        ] = "SAGEConv",
+        config_neighbor_layer: Literal["GATConv", "GCNConv", "SAGEConv"] = "SAGEConv",
         num_config_neighbor_layers: int = 2,
         config_neighbor_dim: int = 64,
         config_neighbor_dropout_between_layers: float = 0.0,
@@ -153,6 +145,8 @@ class LayoutModel(torch.nn.Module):
         self.config_prj = nn.Sequential(
             nn.Linear(node_config_dim, config_dim),
             nn.LeakyReLU(),
+            # nn.Linear(config_dim, config_dim),
+            # nn.LeakyReLU(),
         )
 
         self.dense = torch.nn.Sequential(
@@ -194,9 +188,7 @@ class LayoutModel(torch.nn.Module):
         Returns:
             nn.Module: a sequential layer with convolution and activation
         """
-        assert (
-            num_layers > 1
-        ), f"num_layers must be greater than 1 but got {num_layers}"
+        assert num_layers > 1, f"num_layers must be greater than 1 but got {num_layers}"
 
         conv_layer = getattr(geonn, conv_layer)
         activation = getattr(nn, activation)
@@ -205,8 +197,7 @@ class LayoutModel(torch.nn.Module):
             logger.info(f"Use edge weight for {conv_layer}")
 
         if return_attention_weights and (
-            conv_layer
-            in (geonn.conv.gat_conv.GATConv, geonn.conv.gatv2_conv.GATv2Conv)
+            conv_layer in (geonn.conv.gat_conv.GATConv, geonn.conv.gatv2_conv.GATv2Conv)
         ):
             logger.info(f"return attention weights from {conv_layer}")
 
@@ -220,11 +211,7 @@ class LayoutModel(torch.nn.Module):
                 **conv_kwargs,
             )
 
-        channels = (
-            [in_channels]
-            + [hidden_channels] * (num_layers - 1)
-            + [out_channels]
-        )
+        channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
 
         if conv_kwargs:
             logger.info(f"Set kwargs: {conv_kwargs} for {conv_layer}")
@@ -233,9 +220,7 @@ class LayoutModel(torch.nn.Module):
         if dropout > 0:
             conv_layers.append((nn.Dropout(p=dropout), "x0 -> x0"))
 
-        for i, (in_plane, out_plane) in enumerate(
-            zip(channels[:-1], channels[1:])
-        ):
+        for i, (in_plane, out_plane) in enumerate(zip(channels[:-1], channels[1:])):
             # Not added at the start of the module
             if inner_dropout > 0 and len(conv_layers) > 0:
                 if not (
@@ -243,9 +228,7 @@ class LayoutModel(torch.nn.Module):
                     and len(conv_layers[-1]) > 0
                     and isinstance(conv_layers[-1][0], nn.Dropout)
                 ):
-                    conv_layers.append(
-                        (nn.Dropout(p=inner_dropout), f"x{i} -> x{i}")
-                    )
+                    conv_layers.append((nn.Dropout(p=inner_dropout), f"x{i} -> x{i}"))
 
             conv_layers.extend(
                 [
@@ -273,9 +256,7 @@ class LayoutModel(torch.nn.Module):
             )
 
         return geonn.Sequential(
-            "x0, edge_index, edge_weight"
-            if use_edge_weight
-            else "x0, edge_index",
+            "x0, edge_index, edge_weight" if use_edge_weight else "x0, edge_index",
             conv_layers,
         )
 

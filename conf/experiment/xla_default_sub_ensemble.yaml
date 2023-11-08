@@ -11,7 +11,7 @@ defaults:
 
 dataset:
   source: xla
-  search: default
+  search: random
   max_configs: 10240
   num_configs: 128
 
@@ -27,6 +27,7 @@ model:
   config_layer: SAGEConv
   num_config_layers: 4
   config_dim: 64
+  config_dropout_between_layers: 0.1
 
   head_dim: 64
   dropout: 0.2
@@ -38,7 +39,7 @@ hydra:
 
 logger:
   project: ${project}
-  group: xla_default_sub_ensemble
+  group: xla_random_ensemble
   name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline
@@ -46,14 +47,14 @@ logger:
     - ${dataset.search}
 
 optimizer:
-  lr: 5e-3
-  weight_decay: 1e-7
+  lr: 3e-3
+  weight_decay: 1e-6
 
 scheduler:
   eta_min: 1e-6
 
 trainer:
-  num_epochs: 800
+  num_epochs: 1000
   num_val_epochs: 40
   infer_bs: 100
   early_stopping: -1

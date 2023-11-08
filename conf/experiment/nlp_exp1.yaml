@@ -3,7 +3,7 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: plateau
+  - override /scheduler: cosine
   - override /loss: multi_element_rank
   - override /logger: wandb
   - override /dataset: layout
@@ -18,10 +18,10 @@ dataset:
 model:
   node_layer: SAGEConv
   num_node_layers: 4
-  node_dim: 64
+  node_dim: 96
 
-  config_neighbor_layer: GATConv
-  num_config_neighbor_layers: 2
+  config_neighbor_layer: SAGEConv
+  num_config_neighbor_layers: 3
   config_neighbor_dim: 64
 
   config_layer: SAGEConv
@@ -38,23 +38,20 @@ hydra:
 
 logger:
   project: ${project}
-  group: 
-  name: ${run_name}
+  group: nlp_default_ensemble
+  name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
 trainer:
-  num_epochs: 2000
+  num_epochs: 1200
   num_val_epochs: 40
   infer_bs: 200
   early_stopping: 8
 
 optimizer:
-  lr: 1e-3
-
-scheduler:
-  patience: 3
+  lr: 3e-4
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

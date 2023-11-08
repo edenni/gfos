@@ -3,24 +3,24 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: plateau
+  - override /scheduler: cosine
   - override /loss: multi_element_rank
   - override /logger: wandb
   - override /dataset: layout
   - override /trainer: layout
 
 dataset:
-  source: nlp
+  source: xla
   search: default
   max_configs: 10240
-  num_configs: 256
+  num_configs: 128
 
 model:
   node_layer: SAGEConv
   num_node_layers: 4
   node_dim: 64
 
-  config_neighbor_layer: GATConv
+  config_neighbor_layer: GATv2Conv
   num_config_neighbor_layers: 2
   config_neighbor_dim: 64
 
@@ -28,7 +28,7 @@ model:
   num_config_layers: 4
   config_dim: 64
 
-  head_dim: 64
+  head_dim: 96
   dropout: 0.2
   activation: LeakyReLU
 
@@ -38,23 +38,25 @@ hydra:
 
 logger:
   project: ${project}
-  group: 
-  name: ${run_name}
+  group: xla_default_sub_ensemble
+  name: ${run_name}_fold_${dataset.fold}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
-trainer:
-  num_epochs: 2000
-  num_val_epochs: 40
-  infer_bs: 200
-  early_stopping: 8
-
 optimizer:
-  lr: 1e-3
+  lr: 5e-3
+  weight_decay: 1e-6
 
 scheduler:
-  patience: 3
+  eta_min: 1e-6
+
+trainer:
+  num_epochs: 600
+  num_val_epochs: 40
+  infer_bs: 100
+  early_stopping: -1
+  grad_clip: 1e-1
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
