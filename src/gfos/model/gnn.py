@@ -145,8 +145,6 @@ class LayoutModel(torch.nn.Module):
         self.config_prj = nn.Sequential(
             nn.Linear(node_config_dim, config_dim),
             nn.LeakyReLU(),
-            # nn.Linear(config_dim, config_dim),
-            # nn.LeakyReLU(),
         )
 
         self.dense = torch.nn.Sequential(
@@ -157,6 +155,15 @@ class LayoutModel(torch.nn.Module):
             nn.LeakyReLU(),
             nn.Linear(head_dim, 1, bias=False),
         )
+
+        # self.config_code_gnn = self._create_conv_module(
+        #     conv_layer=config_layer,
+        #     num_layers=2,
+        #     in_channels=op_embedding_dim + config_dim,
+        #     hidden_channels=config_dim,
+        #     out_channels=config_dim,
+        #     activation=activation,
+        # )
 
     def _create_conv_module(
         self,
@@ -270,8 +277,9 @@ class LayoutModel(torch.nn.Module):
         config_edge_index: torch.Tensor = None,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
+        code_feat = self.embedding(node_opcode)
 
-        x = torch.cat([node_feat, self.embedding(node_opcode)], dim=1)
+        x = torch.cat([node_feat, code_feat], dim=1)
 
         # (N, in_channels) -> (N, node_dim)
         x = self.node_gnn(x, edge_index)
@@ -298,8 +306,26 @@ class LayoutModel(torch.nn.Module):
         # (N, node_dim) -> (NC, node_dim)
         x = x[node_config_ids]
 
+        # config_code_feat = code_feat[node_config_ids]
+
         # (C, NC, node_config_dim) -> (C, NC, config_dim)
         node_config_feat = self.config_prj(node_config_feat)
+        # original_shape = node_config_feat.shape
+        # # print(node_config_feat.shape)
+        # node_config_feat = torch.cat(
+        #     [config_code_feat.repeat((c, 1, 1)), node_config_feat], dim=-1
+        # )
+        # node_config_feat = nn.functional.normalize(node_config_feat, dim=-1)
+        # datas = [
+        #     Data(
+        #         x=node_config_feat[i],
+        #         edge_index=config_edge_index,
+        #     )
+        #     for i in range(node_config_feat.shape[0])
+        # ]
+        # batch = Batch.from_data_list(datas)
+        # node_config_feat = self.config_code_gnn(batch.x, batch.edge_index)
+        # node_config_feat = node_config_feat.reshape(original_shape)
 
         # (C, NC, merged_node_dim)
         x = torch.cat(

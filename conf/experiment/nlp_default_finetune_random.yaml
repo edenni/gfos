@@ -10,10 +10,11 @@ defaults:
   - override /trainer: layout
 
 dataset:
-  source: xla
+  source: nlp
   search: default
   max_configs: 10240
-  num_configs: 128
+  num_configs: 256
+  three_split_sampling: false
 
 model:
   node_layer: SAGEConv
@@ -39,25 +40,26 @@ hydra:
 logger:
   project: ${project}
   group: 
-  name: ${run_name}
+  name: ${run_name}_ft
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
+    - finetune
 
 optimizer:
-  lr: 5e-3
-  weight_decay: 1e-6
+  lr: 3e-4
+  weight_decay: 1e-7
 
 scheduler:
-  patience: 2
+  patience: 3
 
 trainer:
   num_epochs: 1000
   num_val_epochs: 40
-  infer_bs: 100
+  infer_bs: 200
   early_stopping: -1
   grad_clip: 1e-1
-  load_path: #${paths.root_dir}/logs/pipeline/layout_xla_random_20231020_205139/runs/2023-10-20_20-51-39/wandb/run-20231020_205321-jqf8u2lh/files/719_0.6497.pth
+  load_path: G:\projects\gfos\logs\pipeline\nlp_ensemble\multiruns\2023-10-27_10-58-40\0\wandb\run-20231027_110222-0ytzj3l1\files\1679_0.9513.pth
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

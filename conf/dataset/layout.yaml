@@ -7,3 +7,4 @@ num_configs: 128
 normalizer_path: ${paths.root_dir}/data/normalizer.json
 config_edge_weight: false
 fold: -1
+three_split_sampling: true
