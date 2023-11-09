@@ -14,6 +14,7 @@ dataset:
   search: default
   max_configs: 10240
   num_configs: 128
+  three_split_sampling: true
 
 model:
   node_layer: SAGEConv
@@ -46,8 +47,8 @@ logger:
     - ${dataset.search}
 
 optimizer:
-  lr: 5e-3
-  weight_decay: 1e-6
+  lr: 3e-5
+  weight_decay: 1e-7
 
 scheduler:
   patience: 2
@@ -57,7 +58,7 @@ trainer:
   num_val_epochs: 40
   infer_bs: 100
   early_stopping: -1
-  grad_clip: 1e-1
-  load_path: #${paths.root_dir}/logs/pipeline/layout_xla_random_20231020_205139/runs/2023-10-20_20-51-39/wandb/run-20231020_205321-jqf8u2lh/files/719_0.6497.pth
+  # grad_clip: 1e-1
+  load_path: ${paths.root_dir}/logs/pipeline/layout_xla_random_20231020_205139/runs/2023-10-20_20-51-39/wandb/run-20231020_205321-jqf8u2lh/files/719_0.6497.pth
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
