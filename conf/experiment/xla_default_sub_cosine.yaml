@@ -25,7 +25,7 @@ model:
   config_neighbor_dim: 64
 
   config_layer: SAGEConv
-  num_config_layers: 3
+  num_config_layers: 4
   config_dim: 64
 
   head_dim: 64
@@ -46,7 +46,7 @@ logger:
     - ${dataset.search}
 
 optimizer:
-  lr: 1e-3
+  lr: 5e-3
   weight_decay: 1e-7
 
 scheduler:
@@ -57,6 +57,6 @@ trainer:
   num_val_epochs: 40
   infer_bs: 100
   early_stopping: -1
-  grad_clip: 1e-1
+  grad_clip: 0.1
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
