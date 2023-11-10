@@ -5,9 +5,30 @@ from typing import Any, Literal
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 from tqdm import tqdm
 
 from gfos.data.graph import get_config_graph
+
+
+class LayoutData(Data):
+    def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if key in ("node_config_ids", "edge_index"):
+            return self.num_nodes
+        elif key == "config_edge_index":
+            return self.num_config_nodes
+        else:
+            return 0
+
+    def __cat_dim__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if "index" in key or "node_config_feat" == key:
+            return 1
+        elif (
+            "node_opcode" in key or "node_config_ids" in key or "config_runtime" in key
+        ):
+            return -1
+        else:
+            return 0
 
 
 @dataclass
@@ -236,8 +257,6 @@ class LayoutDataset(Dataset):
         node_config_ids = record["node_config_ids"]
         argsort_runtime = record["argsort_runtime"]
         config_edge_index = record["config_edge_index"]
-        config_edge_weight = record["config_edge_weight"]
-        config_edge_path = record["config_edge_path"]
 
         c = len(config_runtime)
 
@@ -276,14 +295,13 @@ class LayoutDataset(Dataset):
             node_config_ids=node_config_ids,
             config_runtime=config_runtime,
             config_edge_index=config_edge_index,
-            config_edge_weight=config_edge_weight,
-            config_edge_path=config_edge_path,
+            num_config_nodes=len(node_config_ids),
         )
 
         if "cls_label" in record:
             sample["cls_label"] = record["cls_label"][config_indices]
 
-        return sample
+        return LayoutData(**sample)
 
 
 def sample_configs(config_runtime: np.array, max_configs: int) -> (np.array, np.array):

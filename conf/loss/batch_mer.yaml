@@ -1,0 +1,4 @@
+_target_: gfos.loss.BatchMultiElementRankLoss
+
+margin: 0.5
+number_permutations: 50

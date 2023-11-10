@@ -4,11 +4,11 @@ import pickle
 
 import numpy as np
 import torch
+import wandb
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from torch_geometric.loader import DataLoader
 from tqdm import tqdm
-
-import wandb
 
 from ..data.constants import CONFIG_RUNTIME_MEAN_STD
 from ..data.dataset import LayoutDataset, Normalizer
@@ -151,6 +151,8 @@ class LayoutPipeline(Pipeline):
         node_config_ids = record["node_config_ids"]
         config_runtime = record["config_runtime"]
         config_edge_index = record["config_edge_index"]
+        node_config_feat_batch = record.node_config_feat_batch
+        batch_size = len(record.model_id)
 
         (
             node_feat,
@@ -160,6 +162,7 @@ class LayoutPipeline(Pipeline):
             node_config_ids,
             config_edge_index,
             config_runtime,
+            node_config_feat_batch,
         ) = (
             node_feat.to(device),
             node_opcode.to(device),
@@ -168,6 +171,7 @@ class LayoutPipeline(Pipeline):
             node_config_ids.to(device),
             config_edge_index.to(device),
             config_runtime.to(device),
+            node_config_feat_batch.to(device),
         )
 
         out = self.model(
@@ -177,7 +181,12 @@ class LayoutPipeline(Pipeline):
             node_config_feat,
             node_config_ids,
             config_edge_index,
+            node_config_feat_batch,
+            batch_size,
         )
+
+        out = out.reshape(self.cfg.dataset.num_configs, -1).T.contiguous()
+        config_runtime = config_runtime.reshape(-1, self.cfg.dataset.num_configs)
 
         loss = self.criterion(out, config_runtime)
         loss = loss / accum_iter
@@ -259,16 +268,25 @@ class LayoutPipeline(Pipeline):
         # Catch keyboard interrupt, infer on test set, and exit
         try:
             for epoch in range(num_epochs):
-                # Shuffle the training dataset
-                permutation = np.random.permutation(len(self.train_dataset))
-
                 # Training phase
                 self.model.train()
-                pbar = tqdm(permutation, leave=False, desc=f"Epoch: {epoch}")
+                loader = DataLoader(
+                    self.train_dataset,
+                    batch_size=self.cfg.trainer.batch_size,
+                    shuffle=True,
+                    follow_batch=["node_config_feat", "node_feat"],
+                )
+                # Shuffle the training dataset
+                # permutation = np.random.permutation(len(self.train_dataset))
+                pbar = tqdm(loader, leave=False, desc=f"Epoch: {epoch}")
 
-                for i in pbar:
-                    record = self.train_dataset[i]
-                    loss = self._train_one(record, device, accum_iter)
+                for i, batch in enumerate(pbar):
+                    # record = self.train_dataset[i]
+                    loss = self._train_one(
+                        batch,
+                        device,
+                        accum_iter,
+                    )
                     loss_mean += loss.item()
 
                     pbar.set_postfix_str(f"loss: {loss:.4f}")

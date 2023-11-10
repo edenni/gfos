@@ -270,6 +270,8 @@ class LayoutModel(torch.nn.Module):
         node_config_feat: torch.Tensor,
         node_config_ids: torch.Tensor,
         config_edge_index: torch.Tensor = None,
+        node_config_feat_batch: torch.Tensor = None,
+        batch_size: int = 1,
     ) -> torch.Tensor:
         c = node_config_feat.size(0)
         code_feat = self.embedding(node_opcode)
@@ -329,6 +331,26 @@ class LayoutModel(torch.nn.Module):
             batch = Batch.from_data_list(datas)
             x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
         else:
+            # if batch_size < 2:
+            #     datas = [
+            #         Data(
+            #             x=x[i],
+            #             edge_index=config_edge_index,
+            #         )
+            #         for i in range(x.shape[0])
+            #     ]
+            #     batch = Batch.from_data_list(datas)
+            #     x = self.config_gnn(batch.x, batch.edge_index)
+            #     b = batch.batch
+            # else:
+            #     x = x.reshape(-1, x.shape[-1])
+            #     config_edge_index = config_edge_index.repeat((c, 1, 1)).view(2, -1)
+            #     x = self.config_gnn(x, config_edge_index)
+            #     b = (
+            #         node_config_feat_batch.repeat((c, 1))
+            #         + torch.arange(c).unsqueeze(0).T.to(node_config_feat_batch.device)
+            #         * batch_size
+            #     ).view(-1)
             datas = [
                 Data(
                     x=x[i],
@@ -339,9 +361,18 @@ class LayoutModel(torch.nn.Module):
             batch = Batch.from_data_list(datas)
             x = self.config_gnn(batch.x, batch.edge_index)
 
-        # (C, NC, config_dim) -> (C, config_dim)
-        x = geonn.pool.global_mean_pool(x, batch.batch)
+            b = (
+                batch.batch
+                if batch_size < 2
+                else (
+                    node_config_feat_batch.repeat((c, 1))
+                    + torch.arange(c).unsqueeze(0).T.to(node_config_feat_batch.device)
+                    * batch_size
+                ).view(-1)
+            )
 
+        # (BS*C, NC, config_dim) -> (C, config_dim)
+        x = geonn.pool.global_mean_pool(x, b)
         # (C, config_dim) -> (C,)
         x = self.dense(x).flatten()
 

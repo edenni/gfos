@@ -7,13 +7,9 @@ class MultiElementRankLoss(nn.Module):
     Loss function that compares the output of the model with the output of the model with a permutation of the elements
     """
 
-    def __init__(
-        self, margin: float = 0.0, number_permutations: int = 1
-    ) -> None:
+    def __init__(self, margin: float = 0.0, number_permutations: int = 1) -> None:
         super().__init__()
-        self.loss_fn = torch.nn.MarginRankingLoss(
-            margin=margin, reduction="none"
-        )
+        self.loss_fn = torch.nn.MarginRankingLoss(margin=margin, reduction="none")
         self.number_permutations = number_permutations
 
     def calculate_rank_loss(
@@ -39,6 +35,54 @@ class MultiElementRankLoss(nn.Module):
             permuted_output.view(-1, 1),
             labels.view(-1, 1),
         )
+        return loss.mean()
+
+    def forward(
+        self,
+        outputs: torch.Tensor,
+        config_runtime: torch.Tensor,
+    ):
+        loss = 0
+        for _ in range(self.number_permutations):
+            loss += self.calculate_rank_loss(outputs, config_runtime)
+        return loss / self.number_permutations
+
+
+class BatchMultiElementRankLoss(nn.Module):
+    """
+    Loss function that compares the output of the model with the output of the model with a permutation of the elements
+    """
+
+    def __init__(self, margin: float = 0.0, number_permutations: int = 1) -> None:
+        super().__init__()
+        self.loss_fn = torch.nn.MarginRankingLoss(margin=margin, reduction="none")
+        self.number_permutations = number_permutations
+
+    def calculate_rank_loss(
+        self,
+        outputs: torch.Tensor,
+        config_runtime: torch.Tensor,
+    ):
+        """
+        Generates a permutation of the predictions and targets and calculates the loss MarginRankingLoss against the permutation
+        Args:
+            outputs: Tensor of shape (bs, seq_len) with the outputs of the model
+            config_runtime: Tensor of shape (bs, seq_len) with the runtime of the model
+            config_mask: Tensor of shape (bs, seq_len) with 1 in the positions of the elements
+            and 0 in the positions of the padding
+        Returns:
+            loss: Tensor of shape (bs, seq_len) with the loss for each element in the batch
+        """
+        bs, num_configs = outputs.shape
+        permutation = torch.randperm(num_configs)
+
+        permuted_runtime = config_runtime[:, permutation]
+        labels = 2 * ((config_runtime - permuted_runtime) > 0) - 1
+        permuted_output = outputs[:, permutation]
+        loss = self.loss_fn(
+            outputs.view(-1, 1), permuted_output.view(-1, 1), labels.view(-1, 1)
+        )
+        loss = loss.view(bs, num_configs)
         return loss.mean()
 
     def forward(
@@ -81,9 +125,7 @@ def listMLE(y_pred, y_true, eps=1e-10, padded_value_indicator=-1):
         preds_sorted_by_true_minus_max.exp().flip(dims=[1]), dim=1
     ).flip(dims=[1])
 
-    observation_loss = (
-        torch.log(cumsums + eps) - preds_sorted_by_true_minus_max
-    )
+    observation_loss = torch.log(cumsums + eps) - preds_sorted_by_true_minus_max
 
     observation_loss[mask] = 0.0
 
@@ -131,9 +173,7 @@ def lambdaLoss(
 
     # After sorting, we can mask out the pairs of indices (i, j) containing index of a padded element.
     true_sorted_by_preds = torch.gather(y_true, dim=1, index=indices_pred)
-    true_diffs = (
-        true_sorted_by_preds[:, :, None] - true_sorted_by_preds[:, None, :]
-    )
+    true_diffs = true_sorted_by_preds[:, :, None] - true_sorted_by_preds[:, None, :]
     padded_pairs_mask = torch.isfinite(true_diffs)
 
     if weighing_scheme != "ndcgLoss1_scheme":
@@ -151,9 +191,9 @@ def lambdaLoss(
     # Here we find the gains, discounts and ideal DCGs per slate.
     pos_idxs = torch.arange(1, y_pred.shape[1] + 1).to(device)
     D = torch.log2(1.0 + pos_idxs.float())[None, :]
-    maxDCGs = torch.sum(
-        ((torch.pow(2, y_true_sorted) - 1) / D)[:, :k], dim=-1
-    ).clamp(min=eps)
+    maxDCGs = torch.sum(((torch.pow(2, y_true_sorted) - 1) / D)[:, :k], dim=-1).clamp(
+        min=eps
+    )
     G = (torch.pow(2, true_sorted_by_preds) - 1) / maxDCGs[:, None]
 
     # Here we apply appropriate weighing scheme - ndcgLoss1, ndcgLoss2, ndcgLoss2++ or no weights (=1.0)
@@ -163,9 +203,9 @@ def lambdaLoss(
         weights = globals()[weighing_scheme](G, D, mu, true_sorted_by_preds)  # type: ignore
 
     # We are clamping the array entries to maintain correct backprop (log(0) and division by 0)
-    scores_diffs = (
-        y_pred_sorted[:, :, None] - y_pred_sorted[:, None, :]
-    ).clamp(min=-1e8, max=1e8)
+    scores_diffs = (y_pred_sorted[:, :, None] - y_pred_sorted[:, None, :]).clamp(
+        min=-1e8, max=1e8
+    )
     scores_diffs.masked_fill(torch.isnan(scores_diffs), 0.0)
     weighted_probas = (
         torch.sigmoid(sigma * scores_diffs).clamp(min=eps) ** weights
@@ -175,9 +215,7 @@ def lambdaLoss(
     elif reduction_log == "binary":
         losses = torch.log2(weighted_probas)
     else:
-        raise ValueError(
-            "Reduction logarithm base can be either natural or binary"
-        )
+        raise ValueError("Reduction logarithm base can be either natural or binary")
 
     if reduction == "sum":
         loss = -torch.sum(losses[padded_pairs_mask & ndcg_at_k_mask])

@@ -4,7 +4,7 @@ defaults:
   - override /model: layout
   - override /optimizer: adamw
   - override /scheduler: cosine
-  - override /loss: multi_element_rank
+  - override /loss: batch_mer
   - override /logger: wandb
   - override /dataset: layout
   - override /trainer: layout
@@ -13,7 +13,7 @@ dataset:
   source: xla
   search: default
   max_configs: 10240
-  num_configs: 128
+  num_configs: 32
 
 model:
   node_layer: SAGEConv
@@ -46,17 +46,18 @@ logger:
     - ${dataset.search}
 
 optimizer:
-  lr: 1e-3
+  lr: 3e-3
   weight_decay: 1e-6
 
 scheduler:
   eta_min: 1e-6
 
 trainer:
-  num_epochs: 500
-  num_val_epochs: 40
+  num_epochs: 4000
+  num_val_epochs: 100
   infer_bs: 100
   early_stopping: -1
   grad_clip: 1.0
+  batch_size: 4
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
