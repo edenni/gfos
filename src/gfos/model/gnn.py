@@ -331,26 +331,6 @@ class LayoutModel(torch.nn.Module):
             batch = Batch.from_data_list(datas)
             x = self.config_gnn(batch.x, batch.edge_index, batch.edge_weight)
         else:
-            # if batch_size < 2:
-            #     datas = [
-            #         Data(
-            #             x=x[i],
-            #             edge_index=config_edge_index,
-            #         )
-            #         for i in range(x.shape[0])
-            #     ]
-            #     batch = Batch.from_data_list(datas)
-            #     x = self.config_gnn(batch.x, batch.edge_index)
-            #     b = batch.batch
-            # else:
-            #     x = x.reshape(-1, x.shape[-1])
-            #     config_edge_index = config_edge_index.repeat((c, 1, 1)).view(2, -1)
-            #     x = self.config_gnn(x, config_edge_index)
-            #     b = (
-            #         node_config_feat_batch.repeat((c, 1))
-            #         + torch.arange(c).unsqueeze(0).T.to(node_config_feat_batch.device)
-            #         * batch_size
-            #     ).view(-1)
             datas = [
                 Data(
                     x=x[i],

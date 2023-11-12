@@ -18,17 +18,20 @@ dataset:
 model:
   node_layer: SAGEConv
   num_node_layers: 4
-  node_dim: 64
+  node_dim: 96
+  node_dropout_between_layers: 0.2
 
   config_neighbor_layer: GATConv
-  num_config_neighbor_layers: 2
+  num_config_neighbor_layers: 4
   config_neighbor_dim: 64
+  config_neighbor_dropout_between_layers: 0.2
 
   config_layer: SAGEConv
   num_config_layers: 4
   config_dim: 64
+  config_dropout_between_layers: 0.2
 
-  head_dim: 64
+  head_dim: 128
   dropout: 0.2
   activation: LeakyReLU
 
@@ -39,25 +42,25 @@ hydra:
 logger:
   project: ${project}
   group: 
-  name: ${run_name}_cosine
+  name: ${run_name}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
 optimizer:
-  lr: 3e-3
+  lr: 5e-4
   weight_decay: 1e-6
 
 scheduler:
   eta_min: 1e-6
 
 trainer:
-  num_epochs: 4000
+  num_epochs: 2000
   num_val_epochs: 100
   infer_bs: 100
   early_stopping: -1
-  grad_clip: 1.0
+  grad_clip: 0
   batch_size: 4
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

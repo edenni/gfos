@@ -1,4 +1,6 @@
 import torch
+from torch_geometric.data import Batch
+from torch_sparse import SparseTensor
 
 
 def edges_adjacency(edges: torch.Tensor, add_diagonal=True) -> torch.Tensor:
@@ -45,3 +47,24 @@ def aggregate_neighbors(node_feat: torch.Tensor, edge_index: torch.Tensor):
     )
 
     return out_degree_features - in_degree_features
+
+
+def get_adj(batch):
+    batch_list = batch.to_data_list()
+    processed_batch_list = []
+
+    for g in batch_list:
+        g.adj = SparseTensor(
+            row=g.edge_index[0],
+            col=g.edge_index[1],
+            sparse_sizes=(g.num_nodes, g.num_nodes),
+        )
+        g.cadj = SparseTensor(
+            row=g.config_edge_index[0],
+            col=g.config_edge_index[1],
+            sparse_sizes=(g.num_config_nodes, g.num_config_nodes),
+        )
+
+        processed_batch_list.append(g)
+
+    return Batch.from_data_list(processed_batch_list)
