@@ -85,10 +85,10 @@ class LayoutModel(torch.nn.Module):
         self.use_weight = use_config_edge_weight
         self.use_attr = use_config_edge_attr
         self.return_attention_weights = return_attention_weights
-        self.opcode_weight = nn.Parameter(torch.ones(1, requires_grad=True) * 100)
-        self.config_weights = nn.Parameter(
-            torch.ones(config_dim, requires_grad=True) * 100
-        )
+        # self.opcode_weight = nn.Parameter(torch.ones(1, requires_grad=True) * 100)
+        # self.config_weights = nn.Parameter(
+        #     torch.ones(config_dim, requires_grad=True) * 100
+        # )
 
         merged_node_dim = node_dim + config_neighbor_dim + config_dim
 
@@ -276,7 +276,9 @@ class LayoutModel(torch.nn.Module):
         c = node_config_feat.size(0)
         code_feat = self.embedding(node_opcode)
 
-        x = torch.cat([node_feat, self.opcode_weight * code_feat], dim=1)
+        # x = torch.cat([node_feat, self.opcode_weight * code_feat], dim=1)
+        x = torch.cat([node_feat, code_feat], dim=1)
+
         x = nn.functional.normalize(x, dim=-1)
 
         # (N, in_channels) -> (N, node_dim)
@@ -312,7 +314,7 @@ class LayoutModel(torch.nn.Module):
             [
                 config_neighbors.repeat((c, 1, 1)),
                 x.repeat((c, 1, 1)),
-                self.config_weights * node_config_feat,
+                node_config_feat,  # self.config_weights * node_config_feat,
             ],
             dim=-1,
         )
@@ -351,7 +353,7 @@ class LayoutModel(torch.nn.Module):
                 ).view(-1)
             )
 
-        # (BS*C, NC, config_dim) -> (C, config_dim)
+        # (C*NC, config_dim) -> (C, config_dim)
         x = geonn.pool.global_mean_pool(x, b)
         # (C, config_dim) -> (C,)
         x = self.dense(x).flatten()

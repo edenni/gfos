@@ -106,8 +106,8 @@ class LayoutPipeline(Pipeline):
                     runtime_mean=runtime_mean,
                     runtime_std=runtime_std,
                 )
-                pickle.dump(self.train_dataset, open(".train_dataset.cache", "wb"))
-                pickle.dump(self.valid_dataset, open(".valid_dataset.cache", "wb"))
+                # pickle.dump(self.train_dataset, open(".train_dataset.cache", "wb"))
+                # pickle.dump(self.valid_dataset, open(".valid_dataset.cache", "wb"))
         if test:
             self.test_dataset = LayoutDataset(
                 files=layout_files["test"],
@@ -303,7 +303,7 @@ class LayoutPipeline(Pipeline):
 
                     # Backward
                     if ((i + 1) % self.cfg.trainer.accum_iter == 0) or (
-                        i + 1 == len(self.train_dataset)
+                        i + 1 == len(loader)
                     ):
                         if grad_clip > 0:
                             torch.nn.utils.clip_grad_norm_(
@@ -315,7 +315,7 @@ class LayoutPipeline(Pipeline):
                         log_params = {
                             "epoch": epoch,
                             "train/lr": self.optimizer.param_groups[0]["lr"],
-                            "train/loss": loss_mean,
+                            "train/loss": loss.item() * accum_iter,
                         }
                         if use_logger:
                             wandb.log(log_params)

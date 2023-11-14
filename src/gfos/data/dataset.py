@@ -456,6 +456,7 @@ class LayoutDataset(Dataset):
         indices_dir: str = None,
         runtime_mean: float = None,
         runtime_std: float = None,
+        norm_method: str = "minmax",
         thres: int = 5000,
     ):
         self.max_configs = max_configs
@@ -490,7 +491,13 @@ class LayoutDataset(Dataset):
             if bins is not None:
                 cls_lables = np.digitize(runtime, bins)
 
-            if runtime_mean is None or runtime_std is None:
+            if norm_method == "minmax":
+                runtime = (runtime - runtime.min()) / (runtime.max() - runtime.min())
+            elif norm_method == "norm":
+                runtime = runtime / np.linalg.norm(runtime)
+            elif norm_method == "mean_std" and (
+                runtime_mean is None or runtime_std is None
+            ):
                 runtime = (runtime - runtime.mean()) / runtime.std()
             else:
                 runtime = (runtime - runtime_mean) / runtime_std

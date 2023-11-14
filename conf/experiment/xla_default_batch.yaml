@@ -13,18 +13,18 @@ dataset:
   source: xla
   search: default
   max_configs: 10240
-  num_configs: 32
+  num_configs: 64
 
 model:
   node_layer: SAGEConv
   num_node_layers: 4
-  node_dim: 96
-  node_dropout_between_layers: 0.2
+  node_dim: 64
+  # node_dropout_between_layers: 0.2
 
   config_neighbor_layer: GATConv
   num_config_neighbor_layers: 4
   config_neighbor_dim: 64
-  config_neighbor_dropout_between_layers: 0.2
+  # config_neighbor_dropout_between_layers: 0.2
 
   config_layer: SAGEConv
   num_config_layers: 4
@@ -42,14 +42,14 @@ hydra:
 logger:
   project: ${project}
   group: 
-  name: ${run_name}
+  name: ${run_name}_split_fold_${dataset.fold}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
 optimizer:
-  lr: 5e-4
+  lr: 1e-3
   weight_decay: 1e-6
 
 scheduler:
@@ -58,9 +58,9 @@ scheduler:
 trainer:
   num_epochs: 2000
   num_val_epochs: 100
-  infer_bs: 100
+  infer_bs: 50
   early_stopping: -1
-  grad_clip: 0
+  grad_clip: 1.0
   batch_size: 4
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.
