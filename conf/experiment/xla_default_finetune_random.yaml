@@ -3,8 +3,8 @@
 defaults:
   - override /model: layout
   - override /optimizer: adamw
-  - override /scheduler: plateau
-  - override /loss: multi_element_rank
+  - override /scheduler: cosine
+  - override /loss: batch_mer
   - override /logger: wandb
   - override /dataset: layout
   - override /trainer: layout

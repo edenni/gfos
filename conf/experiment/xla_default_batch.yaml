@@ -13,25 +13,26 @@ dataset:
   source: xla
   search: default
   max_configs: 10240
-  num_configs: 64
+  num_configs: 40
+  three_split_sampling: true
+  norm_method: mean_std
 
 model:
   node_layer: SAGEConv
   num_node_layers: 4
   node_dim: 64
-  # node_dropout_between_layers: 0.2
 
   config_neighbor_layer: GATConv
-  num_config_neighbor_layers: 4
+  num_config_neighbor_layers: 2
   config_neighbor_dim: 64
   # config_neighbor_dropout_between_layers: 0.2
 
   config_layer: SAGEConv
   num_config_layers: 4
   config_dim: 64
-  config_dropout_between_layers: 0.2
+  # config_dropout_between_layers: 0.1
 
-  head_dim: 128
+  head_dim: 64
   dropout: 0.2
   activation: LeakyReLU
 
@@ -42,25 +43,25 @@ hydra:
 logger:
   project: ${project}
   group: 
-  name: ${run_name}_split_fold_${dataset.fold}
+  name: ${run_name}
   tags:
     - pipeline
     - ${dataset.source}
     - ${dataset.search}
 
 optimizer:
-  lr: 1e-3
-  weight_decay: 1e-6
+  lr: 5e-3
+  weight_decay: 1e-5
 
 scheduler:
   eta_min: 1e-6
 
 trainer:
-  num_epochs: 2000
+  num_epochs: 1000
   num_val_epochs: 100
-  infer_bs: 50
+  infer_bs: 30
   early_stopping: -1
-  grad_clip: 1.0
+  grad_clip: 0.0
   batch_size: 4
 
 tasks: ["train", "test"]  # available tasks(functions) defined in the pipeline, could be cv, train, test, tune etc.

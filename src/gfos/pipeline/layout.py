@@ -90,6 +90,7 @@ class LayoutPipeline(Pipeline):
                 self.train_dataset = pickle.load(open(".train_dataset.cache", "rb"))
                 self.valid_dataset = pickle.load(open(".valid_dataset.cache", "rb"))
             else:
+                train_files = layout_files["train"] + layout_files["valid"]
                 self.train_dataset = LayoutDataset(
                     files=train_files,
                     max_configs=max_configs,
@@ -99,8 +100,17 @@ class LayoutPipeline(Pipeline):
                     runtime_mean=runtime_mean,
                     runtime_std=runtime_std,
                 )
+                another_search = "random" if search == "default" else "default"
+                valid_files = load_layout(
+                    base_dir=layout_dir, model_type=source, compile_type=another_search
+                )
+                normalizer = Normalizer.from_json(
+                    normalizer_path, source=source, search=another_search
+                )
+                runtime_mean = CONFIG_RUNTIME_MEAN_STD[source][another_search]["mean"]
+                runtime_std = CONFIG_RUNTIME_MEAN_STD[source][another_search]["std"]
                 self.valid_dataset = LayoutDataset(
-                    files=valid_files,
+                    files=valid_files["valid"],
                     normalizer=normalizer,
                     indices_dir=valid_indices_dir,
                     runtime_mean=runtime_mean,
@@ -118,7 +128,7 @@ class LayoutPipeline(Pipeline):
     def device(self):
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def _setup_model(self):
+    def _setup_model(self, load_path: str = None):
         """Setup model, loss function, optimizer, and scheduler"""
         # Create model
         node_feat_dim = self.train_dataset[0]["node_feat"].shape[-1]
@@ -134,13 +144,63 @@ class LayoutPipeline(Pipeline):
             self.cfg.model,
         ).to(self.device)
 
+        if load_path is not None:
+            logger.info(f"Loading model from {self.cfg.trainer.load_path}")
+            state_dict = torch.load(self.cfg.trainer.load_path)
+            if "state_dict" in state_dict:
+                state_dict = state_dict["state_dict"]
+            self.model.load_state_dict(state_dict)
+            # for layer in self.model.dense.children():
+            #     if hasattr(layer, "reset_parameters"):
+            #         logger.warning(f"Resetting parameters for {layer}")
+            #         layer.reset_parameters()
+            self.model.dense = torch.nn.Sequential(
+                torch.nn.Dropout(0.2),
+                torch.nn.Linear(64, 128),
+                torch.nn.LeakyReLU(),
+                torch.nn.Linear(128, 128),
+                torch.nn.LeakyReLU(),
+                torch.nn.Linear(128, 1),
+            ).to(self.device)
+
         # Loss function
         self.criterion = instantiate(self.cfg.loss)
 
         # Optimizer
         self.optimizer = instantiate(
             self.cfg.optimizer,
-            self.model.parameters(),
+            [
+                {
+                    "name": "lr_embed",
+                    "params": self.model.embedding.parameters(),
+                    "lr": self.cfg.optimizer.lr / 2,
+                },
+                {
+                    "name": "lr_node_gnn",
+                    "params": self.model.node_gnn.parameters(),
+                    "lr": self.cfg.optimizer.lr / 2,
+                },
+                {
+                    "name": "lr_config_prj",
+                    "params": self.model.config_prj.parameters(),
+                    "lr": self.cfg.optimizer.lr / 2,
+                },
+                {
+                    "name": "lr_config_neighbor_gnn",
+                    "params": self.model.config_neighbor_gnn.parameters(),
+                    "lr": self.cfg.optimizer.lr / 2,
+                },
+                {
+                    "name": "lr_config_gnn",
+                    "params": self.model.config_gnn.parameters(),
+                    "lr": self.cfg.optimizer.lr / 2,
+                },
+                {
+                    "name": "lr_dense",
+                    "params": self.model.dense.parameters(),
+                    "lr": self.cfg.optimizer.lr,
+                },
+            ],
         )
 
         self.scheduler = instantiate(
@@ -206,19 +266,7 @@ class LayoutPipeline(Pipeline):
 
     def train(self):
         self.create_dataset(test="test" in self.cfg.tasks)
-        self._setup_model()
-
-        if self.cfg.trainer.load_path is not None:
-            logger.info(f"Loading model from {self.cfg.trainer.load_path}")
-            state_dict = torch.load(self.cfg.trainer.load_path)
-            if "state_dict" in state_dict:
-                state_dict = state_dict["state_dict"]
-            self.model.load_state_dict(state_dict)
-            for layer in self.model.dense.children():
-                if hasattr(layer, "reset_parameters"):
-                    logger.warning(f"Resetting parameters for {layer}")
-                    layer.reset_parameters()
-            self.model.to(self.device).train()
+        self._setup_model(self.cfg.trainer.load_path)
 
         use_logger: bool = self.cfg.get("logger") is not None
         if use_logger:
@@ -314,7 +362,7 @@ class LayoutPipeline(Pipeline):
 
                         log_params = {
                             "epoch": epoch,
-                            "train/lr": self.optimizer.param_groups[0]["lr"],
+                            "train/lr": self.optimizer.param_groups[-1]["lr"],
                             "train/loss": loss.item() * accum_iter,
                         }
                         if use_logger:
@@ -523,10 +571,10 @@ class LayoutPipeline(Pipeline):
             if "state_dict" in state_dict:
                 state_dict = state_dict["state_dict"]
             self.model.load_state_dict(state_dict)
-            for layer in self.model.dense.children():
-                if hasattr(layer, "reset_parameters"):
-                    logger.warning(f"Resetting parameters for {layer}")
-                    layer.reset_parameters()
+            # for layer in self.model.dense.children():
+            #     if hasattr(layer, "reset_parameters"):
+            #         logger.warning(f"Resetting parameters for {layer}")
+            #         layer.reset_parameters()
             self.model.to(self.device).train()
 
         use_logger: bool = self.cfg.get("logger") is not None
